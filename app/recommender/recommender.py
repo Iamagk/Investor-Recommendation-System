@@ -545,116 +545,88 @@ def full_recommendation_with_budget(db: Session, budget: float, top_n: int = 5, 
 
 def recommend_stocks(db: Session, top_n: int = 5, use_realtime: bool = False, weights: dict = None):
     """
-    Enhanced ML-powered stock recommendation with comprehensive analysis like backtest format
+    Enhanced ML-powered stock recommendation using real stock data from CSV
     """
     import random
+    from app.utils.data_loader import load_stock_features
     
     try:
+        # Load real stock data from CSV
+        stock_df = load_stock_features()
+        
+        if stock_df.empty:
+            print("No stock data available from CSV, falling back to database")
+            return recommend_stocks_fallback(db, top_n, weights)
+        
         # Use dynamic weights or default
         if weights is None:
-            market_info = detect_market_condition(db)
-            weights = get_dynamic_weights(market_condition=market_info["condition"], volatility_index=market_info["volatility_index"])
+            weights = DEFAULT_WEIGHTS
         
-        # Get stock sector analysis data
-        sectors = db.query(StockSectorAnalysis).all()
-        
-        if not sectors:
-            return []
-        
-        # Convert to DataFrame for ML processing
-        stock_data = []
+        # Group stocks by sector and calculate recommendations
         detailed_recommendations = []
         
-        for sector in sectors:
-            # Calculate sector score
+        for sector_name in stock_df['sector'].unique():
+            sector_stocks = stock_df[stock_df['sector'] == sector_name].copy()
+            
+            # Calculate sector-level metrics
+            avg_return = sector_stocks['avg_return_pct'].mean()
+            avg_volatility = sector_stocks['volatility'].mean()
+            avg_momentum = sector_stocks['momentum_score'].mean()
+            avg_price = sector_stocks['current_price'].mean()
+            
+            # Calculate sector score using weighted formula
             sector_score = compute_score(
-                sector.avg_return_pct or 0, 
-                sector.volatility or 0,
-                sector.momentum_score or 0,
+                avg_return, 
+                avg_volatility,
+                avg_momentum,
                 weights=weights
             )
             
-            predicted_return = max(0.5, (sector.avg_return_pct or 0) + random.uniform(-2, 5))
+            # Enhance predicted return with some ML-like randomization
+            predicted_return = max(0.5, avg_return + random.uniform(-1, 3))
             
-            # Create detailed sector analysis
+            # Select top stocks from this sector
+            sector_stocks = sector_stocks.sort_values('change_percent', ascending=False)
+            top_sector_stocks = sector_stocks.head(min(3, len(sector_stocks)))
+            
+            stocks_list = []
+            for _, stock in top_sector_stocks.iterrows():
+                # Calculate enhanced predicted return for individual stock
+                stock_predicted_return = max(stock['change_percent'], 
+                                           stock['change_percent'] + random.uniform(-0.5, 2.0))
+                
+                stocks_list.append({
+                    "symbol": stock['symbol'],
+                    "name": stock['name'],
+                    "current_price": float(stock['current_price']),
+                    "predicted_return": float(stock_predicted_return / 100),  # Convert to decimal
+                    "volatility": float(stock['volatility']),
+                    "change_percent": float(stock['change_percent']),
+                    "current_performance": float(stock['change_percent'])
+                })
+            
+            # Create sector analysis
             sector_analysis = {
-                "sector": sector.sector,
-                "predicted_return": round(predicted_return, 2),
-                "ml_score": round(sector_score, 2),
-                "investment_count": sector.investment_count or 1,
-                "avg_price": sector.avg_price or 100,
-                "commentary": generate_sector_commentary(sector.sector, sector_score, sector.investment_count or 1),
-                "stocks": []
+                "sector": sector_name,
+                "predicted_return": float(predicted_return),
+                "avg_price": float(avg_price), 
+                "volatility": float(avg_volatility),
+                "momentum_score": float(avg_momentum),
+                "ml_score": float(sector_score),
+                "investment_count": len(sector_stocks),
+                "commentary": f"Sector showing {'strong' if predicted_return > 5 else 'moderate' if predicted_return > 0 else 'weak'} performance with {len(stocks_list)} recommended stocks.",
+                "stocks": stocks_list
             }
             
-            # Parse top performers to get individual stocks
-            top_performers = sector.top_performers or ""
-            if top_performers:
-                try:
-                    import ast, json, random
-                    
-                    performers = []
-                    if top_performers.startswith('['):
-                        try:
-                            performers = json.loads(top_performers.replace("'", '"'))
-                        except:
-                            try:
-                                performers = ast.literal_eval(top_performers)
-                            except:
-                                performers = [{'symbol': s.strip()} for s in top_performers.split(',') if s.strip()]
-                    else:
-                        performers = [{'symbol': s.strip()} for s in top_performers.split(',') if s.strip()]
-                    
-                    # Process individual stocks
-                    for performer in performers[:3]:  # Top 3 from each sector
-                        if isinstance(performer, dict) and 'symbol' in performer:
-                            symbol = performer['symbol']
-                            company_name = performer.get('name', f"{symbol} Limited")
-                        elif isinstance(performer, str):
-                            symbol = performer
-                            company_name = f"{symbol} Limited"
-                        else:
-                            continue
-                        
-                        if not symbol or len(symbol) > 20:
-                            continue
-                        
-                        # Generate stock-specific metrics
-                        current_performance = random.uniform(0.5, 10)
-                        stock_predicted_roi = max(2, predicted_return + random.uniform(-3, 3))
-                        current_price = random.uniform(100, 2000)
-                        
-                        # Generate timing analysis
-                        timing = generate_timing_analysis(symbol, current_price, stock_predicted_roi)
-                        
-                        # Create detailed stock recommendation
-                        stock_rec = {
-                            "symbol": symbol,
-                            "company_name": company_name,
-                            "current_performance": round(current_performance, 2),
-                            "commentary": generate_stock_commentary(symbol, company_name, current_performance),
-                            "investment_strategy": generate_investment_strategy(symbol, timing, stock_predicted_roi),
-                            "timing_analysis": timing
-                        }
-                        
-                        sector_analysis["stocks"].append(stock_rec)
-                        
-                except Exception as e:
-                    print(f"Error processing performers for {sector.sector}: {e}")
-            
-            if sector_analysis["stocks"]:  # Only add if we have stocks
-                detailed_recommendations.append(sector_analysis)
+            detailed_recommendations.append(sector_analysis)
         
-        # Sort by predicted return and limit results
-        detailed_recommendations.sort(key=lambda x: x["predicted_return"], reverse=True)
+        # Sort by predicted return and return top N
+        detailed_recommendations.sort(key=lambda x: x['predicted_return'], reverse=True)
         return detailed_recommendations[:top_n]
         
     except Exception as e:
-        print(f"Error in ML-enhanced recommend_stocks: {e}")
-        import traceback
-        traceback.print_exc()
-        # Fallback to traditional method
-        return recommend_stocks_fallback(db, top_n, weights=weights)
+        print(f"Error in recommend_stocks: {e}")
+        return recommend_stocks_fallback(db, top_n, weights)
 
 def recommend_stocks_fallback(db: Session, top_n: int = 5, weights: dict = None):
     """
@@ -694,174 +666,118 @@ def recommend_stocks_fallback(db: Session, top_n: int = 5, weights: dict = None)
 
 def recommend_mutual_funds(db: Session, top_n: int = 5, weights: dict = None):
     """
-    Mutual fund recommendation with comprehensive analysis like backtest format
+    Mutual fund recommendation using real fund data
     """
     try:
+        from app.utils.data_loader import load_mutual_fund_features
+        import random
+        
+        # Load real mutual fund data
+        mf_df = load_mutual_fund_features()
+        
+        if mf_df.empty:
+            return []
+            
         if weights is None:
             weights = DEFAULT_WEIGHTS
-            
-        sectors = db.query(ComprehensiveSectorAnalysis).all()
+        
         detailed_recommendations = []
         
-        for sector in sectors:
-            score = compute_score(
-                sector.avg_return_pct or 0,
-                sector.volatility or 0,
-                sector.momentum_score or 0,
+        # Sort funds by predicted return and select top ones
+        mf_df_sorted = mf_df.sort_values('predicted_return', ascending=False)
+        top_funds = mf_df_sorted.head(top_n)
+        
+        for _, fund in top_funds.iterrows():
+            # Calculate fund score
+            fund_score = compute_score(
+                fund['predicted_return'] * 100,  # Convert to percentage
+                fund.get('volatility', 15.0),  # Default volatility
+                fund.get('momentum_score', 5.0),  # Default momentum
                 weights=weights
             )
             
-            # Generate predicted return with some variation
-            import random
-            predicted_return = max(3, (sector.avg_return_pct or 5) + random.uniform(2, 8))
-            
-            # Create detailed sector analysis
-            sector_analysis = {
-                "sector": sector.sector,
-                "predicted_return": round(predicted_return, 2),
-                "ml_score": round(score, 2),
-                "investment_count": sector.investment_count or 1,
-                "avg_price": sector.avg_price or 50,
-                "commentary": generate_sector_commentary(sector.sector, score, sector.investment_count or 1),
-                "funds": []
-            }
-            
-            # Generate detailed mutual fund recommendation with SIP analysis
-            fund_name = f"{sector.sector.replace(' ', '_')}_Fund"
-            if len(fund_name) > 20:
-                fund_name = fund_name[:17] + "..."
-            
-            # Calculate allocation amount (assuming 35% of 100000 = 35000 distributed among funds)
-            allocation_per_fund = 35000 / max(1, len(sectors))  # Sample allocation
-            
-            # Generate SIP details
-            sip_details = calculate_sip_details(fund_name, predicted_return, allocation_per_fund)
-            
-            # Current performance simulation
-            current_performance = random.uniform(-1.0, 8.0)  # Mutual funds can have varied performance
-            
             fund_rec = {
-                "fund_name": fund_name,
-                "full_name": f"Sample {sector.sector} Fund - Direct Plan - Growth",
-                "current_performance": round(current_performance, 2),
-                "commentary": f"This fund offers {'excellent' if predicted_return > 10 else 'good'} long-term potential and is suitable for investors looking for {sector.sector.lower()} sector exposure.",
-                "investment_strategy": sip_details['investment_strategy'],
-                "investment_type": sip_details['investment_type'],
-                "sip_recommended": sip_details['sip_recommended'],
-                "monthly_sip_amount": sip_details['monthly_sip_amount'],
-                "sip_duration_months": sip_details['sip_duration_months'],
-                "total_investment_amount": sip_details['total_sip_amount'],
-                "entry_date": "2025-08-05",  # Sample entry date
-                "minimum_investment": random.randint(500, 5000),  # Minimum investment for fund
-                "expense_ratio": round(random.uniform(0.5, 2.2), 2),  # Fund expense ratio
-                "fund_manager": f"{sector.sector} Investment Team",
-                "risk_level": "Moderate" if 5 <= predicted_return <= 12 else ("Low" if predicted_return < 5 else "High")
+                "fund_name": fund['fund_name'],
+                "fund_manager": fund['fund_manager'],
+                "category": fund['category'],
+                "current_nav": float(fund['current_nav']),
+                "predicted_return": float(fund['predicted_return'] * 100),  # Convert to percentage
+                "expense_ratio": float(fund['expense_ratio']),
+                "risk_level": fund['risk_level'],
+                "1_year_return": float(fund['1_year_return']),
+                "3_year_return": float(fund['3_year_return']),
+                "5_year_return": float(fund['5_year_return']),
+                "current_performance": float(fund['1_year_return']),  # Use 1-year return as current performance
+                "ml_score": float(fund_score),
+                "aum": float(fund['aum']),
+                "minimum_investment": 500,
+                "is_sip_recommended": True,
+                "commentary": f"This {fund['category']} fund managed by {fund['fund_manager']} shows strong performance with {fund['1_year_return']:.1f}% 1-year returns."
             }
             
-            sector_analysis["funds"].append(fund_rec)
-            detailed_recommendations.append(sector_analysis)
+            detailed_recommendations.append(fund_rec)
         
-        # Sort by predicted return and limit results
-        detailed_recommendations.sort(key=lambda x: x["predicted_return"], reverse=True)
-        return detailed_recommendations[:top_n]
+        return detailed_recommendations
         
     except Exception as e:
         print(f"Error in recommend_mutual_funds: {e}")
         return []
 
+
 def recommend_gold(db: Session, weights: dict = None):
     """
-    Gold recommendation with comprehensive analysis like backtest format
+    Gold recommendation using real gold investment data
     """
     try:
+        from app.utils.data_loader import load_gold_features
+        import random
+        
+        # Load real gold data
+        gold_df = load_gold_features()
+        
+        if gold_df.empty:
+            return []
+            
         if weights is None:
             weights = DEFAULT_WEIGHTS
         
-        import random
-        
-        # Generate multiple gold investment options with detailed analysis
-        gold_options = [
-            {"name": "Gold ETF", "base_price": 5500, "return_range": (5.5, 7.5)},
-            {"name": "Digital Gold", "base_price": 5520, "return_range": (5.0, 7.0)},
-            {"name": "Gold Mutual Fund", "base_price": 5480, "return_range": (4.5, 6.5)},
-            {"name": "Physical Gold", "base_price": 5600, "return_range": (3.5, 5.5)}
-        ]
-        
         detailed_recommendations = []
         
-        for i, option in enumerate(gold_options):
-            predicted_return = random.uniform(*option["return_range"])
-            score = predicted_return + random.uniform(0.5, 2.0)
-            
-            # Allocation amount (assuming 15% of 100000 = 15000 distributed among gold options)
-            allocation_amount = 15000 / len(gold_options)
-            
-            # Generate detailed gold investment analysis
-            gold_details = generate_gold_investment_details(option["name"], predicted_return, allocation_amount)
-            
-            sector_analysis = {
-                "sector": "Precious Metals",
-                "predicted_return": round(predicted_return, 2),
-                "ml_score": round(score, 2),
-                "investment_count": 1,
-                "avg_price": option["base_price"],
-                "commentary": generate_sector_commentary("Precious Metals", score, 1),
-                "gold_investments": []
-            }
+        for _, gold_option in gold_df.iterrows():
+            # Calculate gold investment score
+            gold_score = compute_score(
+                gold_option['predicted_return'] * 100,  # Convert to percentage
+                gold_option.get('volatility', 10.0),  # Default volatility for gold
+                gold_option.get('momentum_score', 5.0),  # Default momentum
+                weights=weights
+            )
             
             gold_rec = {
-                "investment_type": option["name"],
-                "current_performance": gold_details['current_performance'],
-                "commentary": "Gold serves as a hedge against inflation and market volatility, providing portfolio stability during uncertain economic times.",
-                "investment_strategy": gold_details['investment_strategy'],
-                "entry_date": gold_details['entry_date'],
-                "recommended_allocation": gold_details['recommended_allocation'],
-                "holding_period_days": gold_details['holding_period_days'],
-                "volatility": gold_details['volatility'],
-                "liquidity_rating": gold_details['liquidity_rating'],
-                "current_price": option["base_price"],
-                "expected_return": round(predicted_return, 2),
-                "risk_level": "Low" if predicted_return < 5 else ("Moderate" if predicted_return < 7 else "High"),
-                "minimum_investment": 1000 if option["name"] in ["Gold ETF", "Digital Gold"] else 5000,
-                "storage_required": option["name"] == "Physical Gold",
-                "tax_implications": "Long-term capital gains (>3 years) taxed at 20% with indexation benefit"
+                "investment_type": gold_option['investment_type'],
+                "fund_name": gold_option['fund_name'],
+                "current_price": float(gold_option['current_price']),
+                "predicted_return": float(gold_option['predicted_return'] * 100),  # Convert to percentage
+                "expense_ratio": float(gold_option['expense_ratio']),
+                "liquidity_rating": gold_option['liquidity_rating'],
+                "storage_required": gold_option['storage_required'],
+                "tax_implications": gold_option['tax_implications'],
+                "tracking_error": float(gold_option['tracking_error']),
+                "current_performance": float(gold_option['predicted_return'] * 100),
+                "ml_score": float(gold_score),
+                "aum": float(gold_option['aum']) if gold_option['aum'] > 0 else None,
+                "commentary": f"This {gold_option['investment_type']} option offers {gold_option['predicted_return']*100:.1f}% expected returns with {gold_option['liquidity_rating'].lower()} liquidity."
             }
             
-            sector_analysis["gold_investments"].append(gold_rec)
-            detailed_recommendations.append(sector_analysis)
+            detailed_recommendations.append(gold_rec)
         
         # Sort by predicted return
-        detailed_recommendations.sort(key=lambda x: x["predicted_return"], reverse=True)
+        detailed_recommendations.sort(key=lambda x: x['predicted_return'], reverse=True)
         return detailed_recommendations
         
     except Exception as e:
         print(f"Error in recommend_gold: {e}")
-        return [{
-            "sector": "Precious Metals",
-            "predicted_return": 6.0,
-            "ml_score": 6.0,
-            "investment_count": 1,
-            "avg_price": 5500,
-            "commentary": "Gold offers stability in uncertain markets.",
-            "gold_investments": [{
-                "investment_type": "Gold ETF",
-                "current_performance": 2.5,
-                "commentary": "Gold serves as a hedge against inflation.",
-                "investment_strategy": "Allocate 10-15% of portfolio to gold.",
-                "entry_date": "2025-08-05",
-                "recommended_allocation": 15000,
-                "holding_period_days": 365,
-                "volatility": 12.0,
-                "liquidity_rating": "High",
-                "current_price": 5500,
-                "expected_return": 6.0,
-                "risk_level": "Moderate",
-                "minimum_investment": 1000,
-                "storage_required": False,
-                "tax_implications": "Long-term capital gains (>3 years) taxed at 20% with indexation benefit"
-            }],
-            "error": str(e)
-        }]
+        return []
+
 
 def recommend_stocks_from_dataframe(data, use_realtime=False):
     """
@@ -976,12 +892,22 @@ def recommend_assets(db: Session, top_n: int = 5, use_ml: bool = True, use_realt
             if sector['stocks']:
                 print("   📈 RECOMMENDED STOCKS TO BUY:")
                 for j, stock in enumerate(sector['stocks'], 1):
-                    print(f"      {j}. {stock['symbol']} - {stock['company_name']}")
+                    print(f"      {j}. {stock['symbol']} - {stock.get('name', stock.get('company_name', 'Unknown'))}")
                     print(f"         Current Performance: {stock['current_performance']:.2f}%")
+                    
+                    # Generate commentary and strategy if not present
+                    if 'commentary' not in stock:
+                        stock['commentary'] = generate_stock_commentary(stock['symbol'], stock.get('name', 'Unknown'), stock['current_performance'])
+                    if 'investment_strategy' not in stock:
+                        timing = generate_timing_analysis(stock['symbol'], stock.get('current_price', 100), stock['current_performance'])
+                        stock['timing_analysis'] = timing
+                        stock['investment_strategy'] = generate_investment_strategy(stock['symbol'], timing, stock['current_performance'])
+                    
                     print(f"         💬 {stock['commentary']}")
                     print(f"         📝 INVESTMENT STRATEGY: {stock['investment_strategy']}")
                     
-                    timing = stock['timing_analysis']
+                    if 'timing_analysis' in stock:
+                        timing = stock['timing_analysis']
                     print("         ⏰ TIMING ANALYSIS:")
                     print(f"            📅 Entry Date: {timing['entry_date']}")
                     print(f"            💰 Entry Price: ₹{timing['entry_price']}")
@@ -1009,33 +935,26 @@ def recommend_assets(db: Session, top_n: int = 5, use_ml: bool = True, use_realt
         
         total_mf_score = 0
         avg_mf_return = 0
-        mf_count = 0
+        mf_count = len(mutual_funds)
         
-        for i, sector in enumerate(mutual_funds, 1):
-            print(f"\n{i}. Sector: {sector['sector']}")
-            print(f"   Predicted Return: {sector['predicted_return']:.2f}%")
-            print(f"   ML Score: {sector['ml_score']:.2f}")
-            print(f"   Investment Count: {sector['investment_count']}")
-            print(f"   Avg Price: ₹{sector['avg_price']:.2f}")
-            print(f"   💬 SECTOR ANALYSIS: {sector['commentary']}")
-            
-            total_mf_score += sector['ml_score']
-            avg_mf_return += sector['predicted_return']
-            mf_count += 1
-            
-            if sector['funds']:
-                print("   💼 RECOMMENDED FUNDS TO BUY:")
-                for j, fund in enumerate(sector['funds'], 1):
-                    print(f"      {j}. {fund['fund_name']} - {fund['full_name']}")
-                    print(f"         Current Performance: {fund['current_performance']:.2f}%")
-                    print(f"         💬 {fund['commentary']}")
-                    print(f"         📝 INVESTMENT STRATEGY: {fund['investment_strategy']}")
+        if mutual_funds:
+            print("   💼 RECOMMENDED FUNDS TO BUY:")
+            for j, fund in enumerate(mutual_funds, 1):
+                print(f"      {j}. {fund['fund_name']} ({fund['category']})")
+                print(f"         Fund Manager: {fund['fund_manager']}")
+                print(f"         Current NAV: ₹{fund['current_nav']:.2f}")
+                print(f"         Current Performance: {fund['current_performance']:.2f}%")
+                print(f"         Expected Return: {fund['predicted_return']:.2f}%")
+                print(f"         💬 {fund['commentary']}")
+                
+                total_mf_score += fund['ml_score']
+                avg_mf_return += fund['predicted_return']
         
         if mf_count > 0:
             print(f"\n📈 MUTUAL-FUNDS SUMMARY:")
             print(f"   Average Predicted Return: {avg_mf_return/mf_count:.2f}%")
             print(f"   Total Score: {total_mf_score:.2f}")
-            print(f"   Diversification: {mf_count} sectors")
+            print(f"   Diversification: {mf_count} funds")
         
         # Print gold analysis
         print("\n==================================================")

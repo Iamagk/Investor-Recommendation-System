@@ -22,8 +22,19 @@ def get_comprehensive_recommendations(
     - Timing analysis, volatility metrics, and investment strategies
     """
     try:
-        # Generate basic recommendations
-        basic_recs = recommend_assets(db, top_n=10, use_ml=True, use_realtime=False)
+        # Use our working individual recommendation functions - but extract individual items
+        stock_sectors = recommend_stocks(db, top_n=3)  # Get fewer sectors
+        mf_recs = recommend_mutual_funds(db, top_n=6)
+        gold_recs = recommend_gold(db)  # No top_n parameter for gold
+        
+        # Extract individual stocks from sectors
+        stock_recs = []
+        if stock_sectors:
+            for sector in stock_sectors:
+                if 'stocks' in sector:
+                    for stock in sector['stocks']:
+                        stock['sector'] = sector['sector']  # Add sector info to stock
+                        stock_recs.append(stock)
         
         # Create comprehensive recommendations structure
         comprehensive_data = {
@@ -41,9 +52,9 @@ def get_comprehensive_recommendations(
         }
         
         # Stock recommendations with detailed analysis
-        if basic_recs.get("recommendations", {}).get("stocks"):
+        if stock_recs:
             sectors = {}
-            for stock in basic_recs["recommendations"]["stocks"][:8]:  # Top 8 stocks
+            for stock in stock_recs[:8]:  # Top 8 stocks
                 sector = stock.get("sector", "Technology")  # Default sector
                 if sector not in sectors:
                     sectors[sector] = {
@@ -56,16 +67,16 @@ def get_comprehensive_recommendations(
                 # Enhanced stock data with detailed analysis
                 enhanced_stock = {
                     "symbol": stock.get("symbol", "N/A"),
-                    "company_name": stock.get("name", "Unknown Company"),
-                    "current_performance": stock.get("predicted_return", 0) * 100,  # Convert to percentage
+                    "company_name": stock.get("company_name", stock.get("name", "Unknown Company")),
+                    "current_performance": stock.get("current_performance", stock.get("predicted_return", 0)),
                     "investment_strategy": f"Buy on dips strategy with SMA crossover. Target allocation based on {risk_tolerance} risk profile.",
                     "entry_date": (datetime.datetime.now() + datetime.timedelta(days=1)).strftime("%Y-%m-%d"),
                     "entry_price": stock.get("current_price", 100),
                     "exit_date": (datetime.datetime.now() + datetime.timedelta(days=investment_horizon * 30)).strftime("%Y-%m-%d"),
-                    "exit_price": stock.get("current_price", 100) * (1 + stock.get("predicted_return", 0.1)),
-                    "expected_return": stock.get("predicted_return", 0.1) * 100,
+                    "exit_price": stock.get("current_price", 100) * (1 + stock.get("predicted_return", 0.1) / 100),
+                    "expected_return": stock.get("predicted_return", 10.0),
                     "stop_loss": stock.get("current_price", 100) * 0.85,  # 15% stop loss
-                    "target_price": stock.get("current_price", 100) * (1 + stock.get("predicted_return", 0.1)),
+                    "target_price": stock.get("current_price", 100) * (1 + stock.get("predicted_return", 10.0) / 100),
                     "holding_period": investment_horizon * 30,
                     "volatility": stock.get("volatility", 15.0)  # Default volatility
                 }
@@ -78,9 +89,9 @@ def get_comprehensive_recommendations(
             comprehensive_data["recommendations"]["stocks"] = list(sectors.values())
         
         # Mutual Fund recommendations with SIP analysis
-        if basic_recs.get("recommendations", {}).get("mutual_funds"):
+        if mf_recs:
             mf_sectors = {}
-            for mf in basic_recs["recommendations"]["mutual_funds"][:6]:  # Top 6 mutual funds
+            for mf in mf_recs[:6]:  # Top 6 mutual funds
                 sector = mf.get("category", "Equity")
                 if sector not in mf_sectors:
                     mf_sectors[sector] = {
@@ -95,11 +106,11 @@ def get_comprehensive_recommendations(
                 sip_amount = investment_amount / (investment_horizon if is_sip_recommended else 1)
                 
                 enhanced_mf = {
-                    "fund_name": mf.get("name", "Unknown Fund"),
+                    "fund_name": mf.get("fund_name", mf.get("name", "Unknown Fund")),
                     "fund_manager": mf.get("fund_manager", "Professional Fund Manager"),
-                    "current_performance": mf.get("return_1year", 12.0),
+                    "current_performance": mf.get("current_performance", mf.get("return_1year", 12.0)),
                     "investment_strategy": f"{'SIP-based' if is_sip_recommended else 'Lump sum'} investment in {sector.lower()} sector with rupee cost averaging benefits.",
-                    "expected_return": mf.get("return_1year", 12.0),
+                    "expected_return": mf.get("predicted_return", mf.get("return_1year", 12.0)),
                     "is_sip_recommended": is_sip_recommended,
                     "sip_amount": sip_amount / investment_horizon if is_sip_recommended else 0,
                     "sip_duration_months": investment_horizon if is_sip_recommended else 0,
@@ -117,32 +128,29 @@ def get_comprehensive_recommendations(
             comprehensive_data["recommendations"]["mutual_funds"] = list(mf_sectors.values())
         
         # Gold recommendations with detailed analysis
-        if basic_recs.get("recommendations", {}).get("gold"):
+        if gold_recs:
             gold_data = {
                 "sector": "Precious Metals",
                 "predicted_return": 8.5,  # Conservative gold return
-                "investment_opportunities": 3,
+                "investment_opportunities": len(gold_recs),
                 "gold": []
             }
             
-            gold_types = ["Gold ETF", "Digital Gold", "Physical Gold"]
-            for i, gold_type in enumerate(gold_types):
-                base_price = 6500  # Base gold price per gram
-                
+            for i, gold_item in enumerate(gold_recs[:4]):  # Top 4 gold options
                 enhanced_gold = {
-                    "investment_type": gold_type,
-                    "current_performance": 8.5 + (i * 1.5),  # Varying performance
-                    "investment_strategy": f"{gold_type} investment for portfolio diversification and inflation hedge.",
+                    "investment_type": gold_item.get("name", gold_item.get("investment_type", f"Gold Option {i+1}")),
+                    "current_performance": gold_item.get("current_performance", 8.5 + (i * 1.5)),
+                    "investment_strategy": gold_item.get("commentary", f"{gold_item.get('name', 'Gold')} investment for portfolio diversification and inflation hedge."),
                     "entry_date": (datetime.datetime.now() + datetime.timedelta(days=1)).strftime("%Y-%m-%d"),
-                    "entry_price": base_price + (i * 100),
+                    "entry_price": gold_item.get("current_price", 6500 + (i * 100)),
                     "exit_date": (datetime.datetime.now() + datetime.timedelta(days=investment_horizon * 30)).strftime("%Y-%m-%d"),
-                    "exit_price": (base_price + (i * 100)) * 1.085,  # 8.5% return
-                    "expected_return": 8.5 + (i * 1.5),
+                    "exit_price": gold_item.get("current_price", 6500 + (i * 100)) * 1.085,  # 8.5% return
+                    "expected_return": gold_item.get("predicted_return", 8.5 + (i * 1.5)),
                     "holding_period": investment_horizon * 30,
                     "volatility": 12.0 - (i * 2),  # ETF less volatile than physical
-                    "liquidity_rating": ["High", "High", "Medium"][i],
-                    "storage_required": gold_type == "Physical Gold",
-                    "tax_implications": "LTCG after 3 years" if gold_type == "Physical Gold" else "STCG/LTCG as per equity"
+                    "liquidity_rating": ["High", "High", "Medium", "Medium"][i],
+                    "storage_required": "Physical" in gold_item.get("name", ""),
+                    "tax_implications": "LTCG after 3 years" if "Physical" in gold_item.get("name", "") else "STCG/LTCG as per equity"
                 }
                 
                 gold_data["gold"].append(enhanced_gold)
