@@ -1,0 +1,16 @@
+fastapi
+uvicorn
+sqlalchemy
+pydantic
+psycopg2-binary
+yfinance
+pandas
+requests
+beautifulsoup4
+schedule
+playwright
+scikit-learn
+xgboost
+numpy
+matplotlib 
+seaborn

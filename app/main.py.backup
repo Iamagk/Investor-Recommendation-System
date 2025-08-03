@@ -1,0 +1,900 @@
+from fastapi import FastAPI, BackgroundTasasync def periodic_scrape():
+    """Periodic background scraping task that runs based on configuration"""
+    while True:
+        try:
+            print("Starting daily data scrape...")
+            background_task_status["periodic"]["status"] = "running"
+            background_task_status["periodic"]["last_run"] = datetime.datetime.now().isoformat()
+            
+            # Calculate next run time
+            next_run = datetime.datetime.now() + datetime.timedelta(hours=SCRAPING_INTERVAL_HOURS)
+            background_task_status["periodic"]["next_run"] = next_run.isoformat()
+            
+            # Run the actual scraping
+            result = await run_daily_scrape()
+            
+            background_task_status["periodic"]["result"] = result
+            background_task_status["periodic"]["status"] = "waiting"
+            
+            print(f"Daily scrape completed. Next run scheduled for: {next_run}")
+            
+            # Wait for the configured interval
+            await asyncio.sleep(SCRAPING_INTERVAL_HOURS * 3600)  # Convert hours to seconds
+            
+        except Exception as e:
+            print(f"Error in periodic scrape: {e}")
+            background_task_status["periodic"]["result"] = {"status": "error", "message": str(e)}
+            background_task_status["periodic"]["status"] = "error"
+            # Wait 1 hour before retrying on error
+            await asyncio.sleep(3600)
+
+async def run_initial_scrape():
+    """Run initial scraping on server startup (non-blocking)"""
+    try:
+        print("Running initial startup scraping...")
+        result = await run_daily_scrape()
+        print(f"Initial scraping completed: {result}")
+    except Exception as e:
+        print(f"Error in initial scraping: {e}")
+
+async def run_daily_scrape():
+    """Execute the daily scraping tasks"""
+    results = {
+        "stocks": {"status": "pending"},
+        "mutual_funds": {"status": "pending"}, 
+        "gold": {"status": "pending"}
+    }ncio
+import datetime
+from contextlib import asynccontextmanager
+from app.routes import stocks, gold, mutual_funds, load_analysis, recommend, ml_predict
+from data.fetch_gold import get_gold_rates
+from app.services.gold_service import store_gold_rates
+
+# Import scraping configuration
+from app.config_scraping import ENABLE_STARTUP_SCRAPING, ENABLE_PERIODIC_SCRAPING, SCRAPING_INTERVAL_HOURS
+
+# Import database connection
+from app.db import get_postgres_connection, Base, engine
+from app.models import analysis_models
+from pymongo import MongoClient
+
+# Create database tables
+Base.metadata.create_all(bind=engine)
+
+# Import scraping and storage functions
+from app.services.stock_service import get_nifty_500_stocks
+from app.services.mutual_funds_service import get_mutual_fund_data
+from app.scrapers.stock_scraper_db import insert_stock_data
+from app.scrapers.mutual_fund_scraper_db import insert_mutual_fund_data
+
+# Import comprehensive scrapers
+from app.scrapers.stock_scraper import scrape_all_stocks
+from app.scrapers.mutual_funds_scraper import get_all_mutual_funds
+from app.scrapers.gold_scraper_db import insert_gold_data
+
+# Global task status tracking
+background_task_status = {
+    "stocks": {"status": "idle", "last_run": None, "result": None},
+    "mutual_funds": {"status": "idle", "last_run": None, "result": None},
+    "gold": {"status": "idle", "last_run": None, "result": None},
+    "all": {"status": "idle", "last_run": None, "result": None},
+    "periodic": {"status": "idle", "last_run": None, "result": None, "next_run": None}
+}
+
+# Global variable to store the periodic task
+periodic_task = None
+
+async def periodic_scrape():
+    """Periodic background scraping task that runs every 24 hours"""
+    while True:
+        try:
+            print("Starting daily data scrape...")
+            background_task_status["periodic"]["status"] = "running"
+            background_task_status["periodic"]["last_run"] = datetime.datetime.now().isoformat()
+            
+            # Calculate next run time
+            next_run = datetime.datetime.now() + datetime.timedelta(hours=24)
+            background_task_status["periodic"]["next_run"] = next_run.isoformat()
+            
+            # Run all scrapers concurrently
+            stocks_task = scrape_all_stocks()
+            mfs_task = asyncio.to_thread(get_all_mutual_funds)
+            # Add gold scraping to periodic task
+            gold_task = asyncio.to_thread(get_gold_rates)
+            
+            stocks_result, mfs_result, gold_result = await asyncio.gather(
+                stocks_task, mfs_task, gold_task, return_exceptions=True
+            )
+            
+            # Process gold data if successful
+            gold_processed = None
+            if not isinstance(gold_result, Exception) and gold_result is not None and not gold_result.empty:
+                try:
+                    store_gold_rates(gold_result)
+                    gold_processed = {"status": "success", "message": f"Stored {len(gold_result)} gold records", "count": len(gold_result)}
+                except Exception as e:
+                    gold_processed = {"status": "error", "message": f"Failed to store gold data: {str(e)}"}
+            else:
+                gold_processed = {"status": "error", "message": "No gold data available or error in fetching"}
+            
+            # Store results
+            result = {
+                "stocks": stocks_result if not isinstance(stocks_result, Exception) else {"status": "error", "message": str(stocks_result)},
+                "mutual_funds": mfs_result if not isinstance(mfs_result, Exception) else {"status": "error", "message": str(mfs_result)},
+                "gold": gold_processed,
+                "completed_at": datetime.datetime.now().isoformat()
+            }
+            
+            background_task_status["periodic"]["result"] = result
+            background_task_status["periodic"]["status"] = "waiting"
+            
+            print("Daily data scrape completed. Sleeping for 24 hours.")
+            
+        except Exception as e:
+            print(f"Error in periodic scrape: {e}")
+            background_task_status["periodic"]["result"] = {"status": "error", "message": str(e)}
+            background_task_status["periodic"]["status"] = "error"
+        
+        # Sleep for 24 hours (86400 seconds)
+        await asyncio.sleep(86400)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Manage application lifespan - startup and shutdown"""
+    global periodic_task
+    
+    # Startup
+    print("Starting Smart Investment Recommender API...")
+    
+    if ENABLE_PERIODIC_SCRAPING:
+        print("Initializing periodic data scraping task...")
+        periodic_task = asyncio.create_task(periodic_scrape())
+        background_task_status["periodic"]["status"] = "initialized"
+        print(f"Periodic scraping task started - will run every {SCRAPING_INTERVAL_HOURS} hours")
+    else:
+        print("Periodic scraping is disabled in configuration")
+        background_task_status["periodic"]["status"] = "disabled"
+    
+    if ENABLE_STARTUP_SCRAPING:
+        print("Running initial data scrape on startup...")
+        # Run initial scrape in background without blocking server startup
+        asyncio.create_task(run_initial_scrape())
+    else:
+        print("Startup scraping is disabled in configuration")
+    
+    yield  # Application runs here
+    
+    # Shutdown
+    print("Shutting down Smart Investment Recommender API...")
+    if periodic_task:
+        print("Cancelling periodic scraping task...")
+        periodic_task.cancel()
+        try:
+            await periodic_task
+        except asyncio.CancelledError:
+            print("Periodic scraping task cancelled successfully")
+    print("Application shutdown complete")
+
+app = FastAPI(
+    title="Smart Sector Investment Recommender",
+    description="Get investment suggestions across sectors like Stocks, Gold, FDs, etc.",
+    version="1.0.0",
+    lifespan=lifespan
+)
+
+# Include route modules
+app.include_router(stocks.router)
+app.include_router(gold.router, prefix="/gold", tags=["Gold"])
+app.include_router(mutual_funds.router)
+app.include_router(load_analysis.router)
+app.include_router(recommend.router)
+app.include_router(ml_predict.router, prefix="/ml", tags=["Machine Learning"])
+
+@app.get("/")
+def home():
+    return {"message": "Welcome to the Smart Investment Recommender API"}
+
+@app.get("/health")
+def health_check():
+    """Quick health check endpoint"""
+    return {
+        "status": "healthy",
+        "message": "API is running",
+        "endpoints": {
+            "stocks": ["/stocks/live", "/stocks/all", "/stocks/yfinance", "/stocks", "/stocks/by-symbol/{symbol}"],
+            "mutual_funds": ["/mutual-funds/navs", "/mutual-funds/all", "/mutual-funds", "/mutual-funds/top/{limit}"],
+            "gold": ["/gold/", "/gold/rates", "/gold/fetch-and-store", "/gold/store-rates", "/gold"],
+            "recommendations": ["/recommend/", "/recommend/stocks", "/recommend/mutual-funds", "/recommend/gold", "/recommend/portfolio", "/recommend/sectors"],
+            "analysis": ["/load-analysis-data", "/analysis-data"],
+            "machine_learning": [
+                "/ml/train-model/{asset_type}", 
+                "/ml/predict/{asset_type}", 
+                "/ml/recommend/stocks", 
+                "/ml/recommend/mutual-funds", 
+                "/ml/recommend/gold",
+                "/ml/recommend/stocks/enhanced", 
+                "/ml/recommend/mutual-funds/enhanced", 
+                "/ml/recommend/gold/enhanced",
+                "/ml/recommend/all/enhanced"
+            ],
+            "admin": ["/scrape-all", "/scrape-all-async", "/scrape-status", "/health", "/test"],
+            "background": ["/scrape-stocks-async", "/scrape-mf-async", "/scrape-gold-async"],
+            "periodic": ["Automatic daily scraping enabled - check /scrape-status for details"],
+            "database": ["/stocks", "/mutual-funds", "/gold", "/stocks/by-symbol/{symbol}", "/mutual-funds/top/{limit}"]
+        },
+        "periodic_scraping": {
+            "enabled": True,
+            "interval": "24 hours",
+            "status": background_task_status["periodic"]["status"],
+            "next_run": background_task_status["periodic"]["next_run"]
+        }
+    }
+
+# Background task functions
+async def background_scrape_stocks(task_type: str):
+    """Background task for scraping stocks"""
+    import datetime
+    background_task_status[task_type]["status"] = "running"
+    background_task_status[task_type]["last_run"] = datetime.datetime.now().isoformat()
+    
+    try:
+        result = await scrape_all_stocks()
+        background_task_status[task_type]["result"] = result
+        background_task_status[task_type]["status"] = "completed"
+    except Exception as e:
+        background_task_status[task_type]["result"] = {"status": "error", "message": str(e)}
+        background_task_status[task_type]["status"] = "failed"
+
+async def background_scrape_mutual_funds(task_type: str):
+    """Background task for scraping mutual funds"""
+    import datetime
+    background_task_status[task_type]["status"] = "running"
+    background_task_status[task_type]["last_run"] = datetime.datetime.now().isoformat()
+    
+    try:
+        result = await asyncio.to_thread(get_all_mutual_funds)
+        background_task_status[task_type]["result"] = result
+        background_task_status[task_type]["status"] = "completed"
+    except Exception as e:
+        background_task_status[task_type]["result"] = {"status": "error", "message": str(e)}
+        background_task_status[task_type]["status"] = "failed"
+
+async def background_scrape_gold(task_type: str):
+    """Background task for scraping gold data"""
+    import datetime
+    background_task_status[task_type]["status"] = "running"
+    background_task_status[task_type]["last_run"] = datetime.datetime.now().isoformat()
+    
+    try:
+        # For gold, we'll use the gold service to fetch data
+        from data.fetch_gold import get_gold_rates
+        gold_data = await asyncio.to_thread(get_gold_rates)
+        result = {"status": "success", "data": gold_data.to_dict('records') if not gold_data.empty else []}
+        background_task_status[task_type]["result"] = result
+        background_task_status[task_type]["status"] = "completed"
+    except Exception as e:
+        background_task_status[task_type]["result"] = {"status": "error", "message": str(e)}
+        background_task_status[task_type]["status"] = "failed"
+
+async def background_scrape_all(task_type: str):
+    """Background task for scraping all data types"""
+    import datetime
+    background_task_status[task_type]["status"] = "running"
+    background_task_status[task_type]["last_run"] = datetime.datetime.now().isoformat()
+    
+    try:
+        # Run all scrapers concurrently
+        stocks_task = scrape_all_stocks()
+        mfs_task = asyncio.to_thread(get_all_mutual_funds)
+        
+        from data.fetch_gold import get_gold_rates
+        gold_task = asyncio.to_thread(get_gold_rates)
+        
+        stocks_result, mfs_result, gold_result = await asyncio.gather(
+            stocks_task, mfs_task, gold_task, return_exceptions=True
+        )
+        
+        # Process gold result
+        if not isinstance(gold_result, Exception) and not gold_result.empty:
+            gold_processed = {"status": "success", "data": gold_result.to_dict('records')}
+        else:
+            gold_processed = {"status": "error", "message": str(gold_result) if isinstance(gold_result, Exception) else "No gold data"}
+        
+        result = {
+            "stocks": stocks_result if not isinstance(stocks_result, Exception) else {"status": "error", "message": str(stocks_result)},
+            "mutual_funds": mfs_result if not isinstance(mfs_result, Exception) else {"status": "error", "message": str(mfs_result)},
+            "gold": gold_processed,
+            "gold": gold_result if not isinstance(gold_result, Exception) else {"status": "error", "message": str(gold_result)},
+            "overall_status": "completed"
+        }
+        
+        background_task_status[task_type]["result"] = result
+        background_task_status[task_type]["status"] = "completed"
+    except Exception as e:
+        background_task_status[task_type]["result"] = {"status": "error", "message": str(e)}
+        background_task_status[task_type]["status"] = "failed"
+
+@app.get("/test")
+def test_endpoint():
+    """Fast test endpoint to verify API is working"""
+    return {
+        "status": "working",
+        "timestamp": "2025-08-01",
+        "message": "API is operational with real data sources",
+        "data_sources": {
+            "stocks": "Yahoo Finance (real-time)",
+            "mutual_funds": "AMFI (real NAV data)",
+            "gold": "Yahoo Finance ETF (real prices)"
+        }
+    }
+
+@app.get("/scrape-status")
+def get_scrape_status():
+    """Get the status of all background scraping tasks"""
+    return {
+        "status": "success",
+        "message": "Background task status retrieved",
+        "tasks": background_task_status
+    }
+
+@app.post("/scrape-stocks-async")
+def scrape_stocks_async(background_tasks: BackgroundTasks):
+    """Start background task to scrape stock data"""
+    if background_task_status["stocks"]["status"] == "running":
+        return {
+            "status": "already_running",
+            "message": "Stock scraping task is already running",
+            "task_status": background_task_status["stocks"]
+        }
+    
+    background_tasks.add_task(background_scrape_stocks, "stocks")
+    return {
+        "status": "started",
+        "message": "Stock scraping task started in background",
+        "check_status_at": "/scrape-status"
+    }
+
+@app.post("/scrape-mf-async")
+def scrape_mf_async(background_tasks: BackgroundTasks):
+    """Start background task to scrape mutual fund data"""
+    if background_task_status["mutual_funds"]["status"] == "running":
+        return {
+            "status": "already_running",
+            "message": "Mutual fund scraping task is already running",
+            "task_status": background_task_status["mutual_funds"]
+        }
+    
+    background_tasks.add_task(background_scrape_mutual_funds, "mutual_funds")
+    return {
+        "status": "started",
+        "message": "Mutual fund scraping task started in background",
+        "check_status_at": "/scrape-status"
+    }
+
+@app.post("/scrape-gold-async")
+def scrape_gold_async(background_tasks: BackgroundTasks):
+    """Start background task to scrape gold data"""
+    if background_task_status["gold"]["status"] == "running":
+        return {
+            "status": "already_running",
+            "message": "Gold scraping task is already running",
+            "task_status": background_task_status["gold"]
+        }
+    
+    background_tasks.add_task(background_scrape_gold, "gold")
+    return {
+        "status": "started",
+        "message": "Gold scraping task started in background",
+        "check_status_at": "/scrape-status"
+    }
+
+@app.post("/scrape-all-async")
+def scrape_all_async(background_tasks: BackgroundTasks):
+    """Start background task to scrape all data types concurrently"""
+    if background_task_status["all"]["status"] == "running":
+        return {
+            "status": "already_running",
+            "message": "Comprehensive scraping task is already running",
+            "task_status": background_task_status["all"]
+        }
+    
+    background_tasks.add_task(background_scrape_all, "all")
+    return {
+        "status": "started",
+        "message": "Comprehensive scraping task started in background (all data types)",
+        "check_status_at": "/scrape-status"
+    }
+
+@app.get("/periodic-status")
+def get_periodic_status():
+    """Get detailed status of the periodic scraping task"""
+    periodic_status = background_task_status["periodic"]
+    
+    # Calculate time until next run if waiting
+    time_until_next = None
+    if periodic_status["next_run"]:
+        try:
+            next_run_time = datetime.datetime.fromisoformat(periodic_status["next_run"])
+            time_until_next = str(next_run_time - datetime.datetime.now())
+        except:
+            time_until_next = "Unknown"
+    
+    return {
+        "status": "success",
+        "message": "Periodic scraping status retrieved",
+        "periodic_scraping": {
+            "enabled": True,
+            "interval": "24 hours (86400 seconds)",
+            "current_status": periodic_status["status"],
+            "last_run": periodic_status["last_run"], 
+            "next_run": periodic_status["next_run"],
+            "time_until_next_run": time_until_next,
+            "last_result": periodic_status.get("result", None)
+        }
+    }
+
+@app.post("/trigger-periodic-now")
+def trigger_periodic_now(background_tasks: BackgroundTasks):
+    """Manually trigger the periodic scraping process immediately"""
+    if background_task_status["periodic"]["status"] == "running":
+        return {
+            "status": "already_running",
+            "message": "Periodic scraping is currently running",
+            "suggestion": "Check /periodic-status for details"
+        }
+    
+    # Use the existing scrape-all-async logic for immediate execution
+    background_tasks.add_task(background_scrape_all, "all")
+    
+    return {
+        "status": "triggered",
+        "message": "Periodic scraping triggered manually - running now in background",
+        "note": "This is a one-time manual trigger. Regular 24-hour schedule continues automatically",
+        "check_status_at": "/scrape-status"
+    }
+
+# Database helper functions
+def get_db_connection():
+    """Get PostgreSQL database connection"""
+    return get_postgres_connection()
+
+def get_mongo_connection(mongo_uri="mongodb://localhost:27017", db_name="investment_advisor"):
+    """Get MongoDB connection"""
+    try:
+        client = MongoClient(mongo_uri)
+        db = client[db_name]
+        return db
+    except Exception as e:
+        print(f"MongoDB connection error: {e}")
+        return None
+
+# Database endpoints
+@app.get("/stocks")
+def get_stocks():
+    """Get all stocks from database"""
+    try:
+        conn = get_db_connection()
+        if not conn:
+            return {"status": "error", "message": "Database connection failed", "data": []}
+        
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT symbol, name, last_price, change_percent, market_cap, sector, last_updated 
+            FROM stocks 
+            ORDER BY last_updated DESC
+        """)
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+        
+        stocks_data = [
+            {
+                "symbol": row[0],
+                "name": row[1],
+                "last_price": float(row[2]) if row[2] else 0.0,
+                "change_percent": float(row[3]) if row[3] else 0.0,
+                "market_cap": int(row[4]) if row[4] else 0,
+                "sector": row[5],
+                "last_updated": row[6].isoformat() if row[6] else None
+            }
+            for row in rows
+        ]
+        
+        return {
+            "status": "success",
+            "message": f"Retrieved {len(stocks_data)} stock records",
+            "count": len(stocks_data),
+            "data": stocks_data
+        }
+        
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Error retrieving stocks: {str(e)}",
+            "data": []
+        }
+
+@app.get("/mutual-funds")
+def get_mutual_funds():
+    """Get all mutual funds from database"""
+    try:
+        conn = get_db_connection()
+        if not conn:
+            return {"status": "error", "message": "Database connection failed", "data": []}
+        
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT fund_name, fund_house, category, nav, returns_1y, returns_3y, risk_level, last_updated
+            FROM mutual_funds 
+            ORDER BY last_updated DESC
+        """)
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+        
+        mf_data = [
+            {
+                "fund_name": row[0],
+                "fund_house": row[1],
+                "category": row[2],
+                "nav": float(row[3]) if row[3] else 0.0,
+                "returns_1y": float(row[4]) if row[4] else None,
+                "returns_3y": float(row[5]) if row[5] else None,
+                "risk_level": row[6],
+                "last_updated": row[7].isoformat() if row[7] else None
+            }
+            for row in rows
+        ]
+        
+        return {
+            "status": "success",
+            "message": f"Retrieved {len(mf_data)} mutual fund records",
+            "count": len(mf_data),
+            "data": mf_data
+        }
+        
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Error retrieving mutual funds: {str(e)}",
+            "data": []
+        }
+
+@app.get("/gold")
+def get_gold_prices():
+    """Get all gold prices from database (trying PostgreSQL first, then MongoDB)"""
+    try:
+        # Try PostgreSQL first
+        conn = get_db_connection()
+        if conn:
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT date, price_per_gram, source, updated_at
+                FROM gold_prices 
+                ORDER BY updated_at DESC
+                LIMIT 100
+            """)
+            rows = cur.fetchall()
+            cur.close()
+            conn.close()
+            
+            if rows:
+                gold_data = [
+                    {
+                        "date": row[0].isoformat() if row[0] else None,
+                        "price_per_gram": float(row[1]) if row[1] else 0.0,
+                        "source": row[2],
+                        "updated_at": row[3].isoformat() if row[3] else None
+                    }
+                    for row in rows
+                ]
+                
+                return {
+                    "status": "success",
+                    "message": f"Retrieved {len(gold_data)} gold price records from PostgreSQL",
+                    "count": len(gold_data),
+                    "data": gold_data,
+                    "source": "PostgreSQL"
+                }
+        
+        # Fallback to MongoDB if PostgreSQL fails or has no data
+        db = get_mongo_connection()
+        if db is None:
+            return {"status": "error", "message": "Both PostgreSQL and MongoDB connections failed", "data": []}
+        
+        collection = db["gold_rates"]
+        
+        # Get recent gold rates, sorted by timestamp descending
+        cursor = collection.find().sort("timestamp", -1).limit(100)
+        gold_records = list(cursor)
+        
+        # Convert MongoDB documents to API response format
+        gold_data = []
+        for record in gold_records:
+            # Remove MongoDB _id field and format data
+            record.pop('_id', None)
+            
+            # Ensure timestamp is properly formatted
+            if 'timestamp' in record and record['timestamp']:
+                record['timestamp'] = record['timestamp'].isoformat() if hasattr(record['timestamp'], 'isoformat') else str(record['timestamp'])
+            
+            gold_data.append(record)
+        
+        return {
+            "status": "success",
+            "message": f"Retrieved {len(gold_data)} gold price records from MongoDB",
+            "count": len(gold_data),
+            "data": gold_data,
+            "source": "MongoDB"
+        }
+        
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Error retrieving gold prices: {str(e)}",
+            "data": []
+        }
+
+# Additional database endpoints with filtering
+@app.get("/stocks/by-symbol/{symbol}")
+def get_stock_by_symbol(symbol: str):
+    """Get specific stock by symbol from database"""
+    try:
+        conn = get_db_connection()
+        if not conn:
+            return {"status": "error", "message": "Database connection failed", "data": None}
+        
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT symbol, name, last_price, change_percent, market_cap, sector, last_updated 
+            FROM stocks 
+            WHERE UPPER(symbol) = UPPER(%s)
+        """, (symbol,))
+        row = cur.fetchone()
+        cur.close()
+        conn.close()
+        
+        if row:
+            stock_data = {
+                "symbol": row[0],
+                "name": row[1],
+                "last_price": float(row[2]) if row[2] else 0.0,
+                "change_percent": float(row[3]) if row[3] else 0.0,
+                "market_cap": int(row[4]) if row[4] else 0,
+                "sector": row[5],
+                "last_updated": row[6].isoformat() if row[6] else None
+            }
+            return {
+                "status": "success",
+                "message": f"Stock {symbol} found",
+                "data": stock_data
+            }
+        else:
+            return {
+                "status": "not_found",
+                "message": f"Stock {symbol} not found in database",
+                "data": None
+            }
+        
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Error retrieving stock {symbol}: {str(e)}",
+            "data": None
+        }
+
+@app.get("/mutual-funds/top/{limit}")
+def get_top_mutual_funds(limit: int = 10):
+    """Get top performing mutual funds by NAV from database"""
+    try:
+        if limit > 100:
+            limit = 100  # Cap at 100 for performance
+            
+        conn = get_db_connection()
+        if not conn:
+            return {"status": "error", "message": "Database connection failed", "data": []}
+        
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT fund_name, fund_house, category, nav, returns_1y, returns_3y, risk_level, last_updated
+            FROM mutual_funds 
+            ORDER BY nav DESC
+            LIMIT %s
+        """, (limit,))
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+        
+        mf_data = [
+            {
+                "fund_name": row[0],
+                "fund_house": row[1],
+                "category": row[2],
+                "nav": float(row[3]) if row[3] else 0.0,
+                "returns_1y": float(row[4]) if row[4] else None,
+                "returns_3y": float(row[5]) if row[5] else None,
+                "risk_level": row[6],
+                "last_updated": row[7].isoformat() if row[7] else None
+            }
+            for row in rows
+        ]
+        
+        return {
+            "status": "success",
+            "message": f"Retrieved top {len(mf_data)} mutual funds by NAV",
+            "count": len(mf_data),
+            "data": mf_data
+        }
+        
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Error retrieving top mutual funds: {str(e)}",
+            "data": []
+        }
+
+@app.get("/gold/rates")
+def get_gold_data():
+    """Get gold rates using the data fetcher with multiple fallback methods"""
+    try:
+        gold_df = get_gold_rates()
+        if gold_df is not None and not gold_df.empty:
+            # Convert DataFrame to JSON-serializable format
+            gold_data = gold_df.to_dict('records')
+            return {
+                "status": "success",
+                "message": "Gold rates fetched successfully",
+                "count": len(gold_data),
+                "data": gold_data,
+                "source": gold_data[0].get("Source", "Unknown") if gold_data else "Unknown"
+            }
+        else:
+            return {
+                "status": "error",
+                "message": "No gold rate data available",
+                "data": []
+            }
+    except Exception as e:
+        return {
+            "status": "error", 
+            "message": f"Error fetching gold rates: {str(e)}",
+            "data": []
+        }
+
+@app.get("/gold/fetch-and-store")
+def fetch_and_store_gold_rates():
+    """Fetch gold rates and store them in the database"""
+    try:
+        # Fetch gold rates
+        gold_df = get_gold_rates()
+        if gold_df is not None and not gold_df.empty:
+            # Store in database
+            store_gold_rates(gold_df)
+            
+            # Convert DataFrame to JSON for response
+            gold_data = gold_df.to_dict('records')
+            return {
+                "status": "success",
+                "message": "Gold rates fetched and stored successfully",
+                "count": len(gold_data),
+                "data": gold_data,
+                "source": gold_data[0].get("Source", "Unknown") if gold_data else "Unknown"
+            }
+        else:
+            return {
+                "status": "error",
+                "message": "No gold rate data available to store",
+                "data": []
+            }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Error fetching and storing gold rates: {str(e)}",
+            "data": []
+        }
+
+@app.get("/scrape-all")
+def scrape_all():
+    """Scrape and store data from all sources (stocks, mutual funds, gold)"""
+    results = {
+        "status": "success",
+        "stocks": 0,
+        "mutual_funds": 0,
+        "gold": "not processed",
+        "errors": []
+    }
+    
+    try:
+        # Stock Data
+        try:
+            print("Fetching stock data...")
+            stocks = get_nifty_500_stocks()
+            if isinstance(stocks, list) and len(stocks) > 0:
+                success = insert_stock_data(stocks)
+                if success:
+                    results["stocks"] = len(stocks)
+                    print(f"Successfully stored {len(stocks)} stock records")
+                else:
+                    results["errors"].append("Failed to store stock data")
+            else:
+                results["errors"].append("No stock data received or error in fetching")
+        except Exception as e:
+            results["errors"].append(f"Stock error: {str(e)}")
+
+        # Mutual Fund Data
+        try:
+            print("Fetching mutual fund data...")
+            mfs = get_mutual_fund_data()
+            if isinstance(mfs, list) and len(mfs) > 0:
+                # Convert AMFI data format to database format
+                formatted_mfs = []
+                for mf in mfs:
+                    formatted_mf = {
+                        "scheme_code": mf.get("code", ""),
+                        "scheme_name": mf.get("scheme_name", ""),
+                        "category": "General",  # Default category
+                        "nav": mf.get("nav", 0),
+                        "nav_date": mf.get("date", None),
+                        "returns_1yr": None,
+                        "returns_3yr": None,
+                        "returns_5yr": None
+                    }
+                    formatted_mfs.append(formatted_mf)
+                
+                success = insert_mutual_fund_data(formatted_mfs)
+                if success:
+                    results["mutual_funds"] = len(formatted_mfs)
+                    print(f"Successfully stored {len(formatted_mfs)} mutual fund records")
+                else:
+                    results["errors"].append("Failed to store mutual fund data")
+            else:
+                results["errors"].append("No mutual fund data received or error in fetching")
+        except Exception as e:
+            results["errors"].append(f"Mutual fund error: {str(e)}")
+
+        # Gold Data
+        try:
+            print("Fetching gold data...")
+            gold_df = get_gold_rates()
+            if gold_df is not None and not gold_df.empty:
+                store_gold_rates(gold_df)
+                results["gold"] = "inserted successfully"
+                print("Successfully stored gold data")
+            else:
+                results["errors"].append("No gold data received")
+        except Exception as e:
+            results["errors"].append(f"Gold error: {str(e)}")
+
+        # Update overall status
+        if results["errors"]:
+            results["status"] = "partial_success" if (results["stocks"] > 0 or results["mutual_funds"] > 0 or results["gold"] == "inserted successfully") else "error"
+
+        return results
+
+    except Exception as e:
+        return {
+            "status": "error", 
+            "message": f"Critical error in scrape-all: {str(e)}",
+            "stocks": 0,
+            "mutual_funds": 0,
+            "gold": "failed"
+        }
+
+def main():
+    """Command line function for testing gold data fetching and storing"""
+    gold_df = get_gold_rates()
+    if gold_df is not None:
+        print("Gold Rates Fetched:")
+        print(gold_df.head())
+        
+        # Store the gold rates using the service
+        try:
+            store_gold_rates(gold_df)
+            print("Gold rates stored successfully!")
+        except Exception as e:
+            print(f"Failed to store gold rates: {e}")
+    else:
+        print("Failed to fetch gold rates.")
+
+if __name__ == "__main__":
+    main()

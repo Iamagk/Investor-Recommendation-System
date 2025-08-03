@@ -1,0 +1,2 @@
+/* Placeholder for profile image - You can replace this with your actual image */
+/* This file is just for reference - add your actual image file (profile.jpg, profile.png, etc.) to this directory */
