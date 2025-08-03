@@ -8,6 +8,157 @@ from app.utils.data_loader import load_stock_features
 
 router = APIRouter(tags=["Recommendations"])
 
+@router.get("/comprehensive", summary="Get comprehensive investment recommendations with detailed analysis")
+def get_comprehensive_recommendations(
+    db: Session = Depends(get_db),
+    investment_amount: float = Query(default=100000, description="Investment amount in INR"),
+    risk_tolerance: str = Query(default="moderate", description="Risk tolerance: low, moderate, high"),
+    investment_horizon: int = Query(default=12, description="Investment horizon in months")
+):
+    """
+    Returns comprehensive investment recommendations with detailed analysis including:
+    - Sector-wise breakdown with predicted returns
+    - Specific stock/MF/gold recommendations with entry/exit strategies
+    - Timing analysis, volatility metrics, and investment strategies
+    """
+    try:
+        # Generate basic recommendations
+        basic_recs = recommend_assets(db, top_n=10, use_ml=True, use_realtime=False)
+        
+        # Create comprehensive recommendations structure
+        comprehensive_data = {
+            "recommendations": {
+                "stocks": [],
+                "mutual_funds": [],
+                "gold": []
+            },
+            "meta": {
+                "investment_amount": investment_amount,
+                "risk_tolerance": risk_tolerance,
+                "investment_horizon": investment_horizon,
+                "generated_at": datetime.datetime.now().isoformat()
+            }
+        }
+        
+        # Stock recommendations with detailed analysis
+        if "stocks" in basic_recs:
+            sectors = {}
+            for stock in basic_recs["stocks"][:8]:  # Top 8 stocks
+                sector = stock.get("sector", "Technology")  # Default sector
+                if sector not in sectors:
+                    sectors[sector] = {
+                        "sector": sector,
+                        "predicted_return": 0,
+                        "investment_opportunities": 0,
+                        "stocks": []
+                    }
+                
+                # Enhanced stock data with detailed analysis
+                enhanced_stock = {
+                    "symbol": stock.get("symbol", "N/A"),
+                    "company_name": stock.get("name", "Unknown Company"),
+                    "current_performance": stock.get("predicted_return", 0) * 100,  # Convert to percentage
+                    "investment_strategy": f"Buy on dips strategy with SMA crossover. Target allocation based on {risk_tolerance} risk profile.",
+                    "entry_date": (datetime.datetime.now() + datetime.timedelta(days=1)).strftime("%Y-%m-%d"),
+                    "entry_price": stock.get("current_price", 100),
+                    "exit_date": (datetime.datetime.now() + datetime.timedelta(days=investment_horizon * 30)).strftime("%Y-%m-%d"),
+                    "exit_price": stock.get("current_price", 100) * (1 + stock.get("predicted_return", 0.1)),
+                    "expected_return": stock.get("predicted_return", 0.1) * 100,
+                    "stop_loss": stock.get("current_price", 100) * 0.85,  # 15% stop loss
+                    "target_price": stock.get("current_price", 100) * (1 + stock.get("predicted_return", 0.1)),
+                    "holding_period": investment_horizon * 30,
+                    "volatility": stock.get("volatility", 15.0)  # Default volatility
+                }
+                
+                sectors[sector]["stocks"].append(enhanced_stock)
+                sectors[sector]["investment_opportunities"] += 1
+                sectors[sector]["predicted_return"] = max(sectors[sector]["predicted_return"], 
+                                                        enhanced_stock["expected_return"])
+            
+            comprehensive_data["recommendations"]["stocks"] = list(sectors.values())
+        
+        # Mutual Fund recommendations with SIP analysis
+        if "mutual_funds" in basic_recs:
+            mf_sectors = {}
+            for mf in basic_recs["mutual_funds"][:6]:  # Top 6 mutual funds
+                sector = mf.get("category", "Equity")
+                if sector not in mf_sectors:
+                    mf_sectors[sector] = {
+                        "sector": sector,
+                        "predicted_return": 0,
+                        "investment_opportunities": 0,
+                        "mutual_funds": []
+                    }
+                
+                # Determine SIP vs Lump Sum based on amount and risk tolerance
+                is_sip_recommended = investment_amount > 50000 or risk_tolerance == "moderate"
+                sip_amount = investment_amount / (investment_horizon if is_sip_recommended else 1)
+                
+                enhanced_mf = {
+                    "fund_name": mf.get("name", "Unknown Fund"),
+                    "fund_manager": mf.get("fund_manager", "Professional Fund Manager"),
+                    "current_performance": mf.get("return_1year", 12.0),
+                    "investment_strategy": f"{'SIP-based' if is_sip_recommended else 'Lump sum'} investment in {sector.lower()} sector with rupee cost averaging benefits.",
+                    "expected_return": mf.get("return_1year", 12.0),
+                    "is_sip_recommended": is_sip_recommended,
+                    "sip_amount": sip_amount / investment_horizon if is_sip_recommended else 0,
+                    "sip_duration_months": investment_horizon if is_sip_recommended else 0,
+                    "lump_sum_amount": investment_amount if not is_sip_recommended else 0,
+                    "expense_ratio": mf.get("expense_ratio", 1.5),
+                    "risk_level": risk_tolerance.title(),
+                    "minimum_investment": 500 if is_sip_recommended else 5000
+                }
+                
+                mf_sectors[sector]["mutual_funds"].append(enhanced_mf)
+                mf_sectors[sector]["investment_opportunities"] += 1
+                mf_sectors[sector]["predicted_return"] = max(mf_sectors[sector]["predicted_return"], 
+                                                           enhanced_mf["expected_return"])
+            
+            comprehensive_data["recommendations"]["mutual_funds"] = list(mf_sectors.values())
+        
+        # Gold recommendations with detailed analysis
+        if "gold" in basic_recs:
+            gold_data = {
+                "sector": "Precious Metals",
+                "predicted_return": 8.5,  # Conservative gold return
+                "investment_opportunities": 3,
+                "gold": []
+            }
+            
+            gold_types = ["Gold ETF", "Digital Gold", "Physical Gold"]
+            for i, gold_type in enumerate(gold_types):
+                base_price = 6500  # Base gold price per gram
+                
+                enhanced_gold = {
+                    "investment_type": gold_type,
+                    "current_performance": 8.5 + (i * 1.5),  # Varying performance
+                    "investment_strategy": f"{gold_type} investment for portfolio diversification and inflation hedge.",
+                    "entry_date": (datetime.datetime.now() + datetime.timedelta(days=1)).strftime("%Y-%m-%d"),
+                    "entry_price": base_price + (i * 100),
+                    "exit_date": (datetime.datetime.now() + datetime.timedelta(days=investment_horizon * 30)).strftime("%Y-%m-%d"),
+                    "exit_price": (base_price + (i * 100)) * 1.085,  # 8.5% return
+                    "expected_return": 8.5 + (i * 1.5),
+                    "holding_period": investment_horizon * 30,
+                    "volatility": 12.0 - (i * 2),  # ETF less volatile than physical
+                    "liquidity_rating": ["High", "High", "Medium"][i],
+                    "storage_required": gold_type == "Physical Gold",
+                    "tax_implications": "LTCG after 3 years" if gold_type == "Physical Gold" else "STCG/LTCG as per equity"
+                }
+                
+                gold_data["gold"].append(enhanced_gold)
+            
+            comprehensive_data["recommendations"]["gold"] = [gold_data]
+        
+        return {
+            "status": "success",
+            "message": "Comprehensive investment recommendations generated successfully",
+            "data": comprehensive_data,
+            "timestamp": datetime.datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating comprehensive recommendations: {str(e)}")
+
 @router.get("/", summary="Get top investment recommendations")
 def get_recommendations(
     db: Session = Depends(get_db),

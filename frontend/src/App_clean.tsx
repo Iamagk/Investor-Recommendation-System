@@ -24,73 +24,6 @@ interface DetailedInvestment {
   average_expected_return: number;
 }
 
-interface StockRecommendation {
-  symbol: string;
-  company_name: string;
-  current_performance: number;
-  investment_strategy: string;
-  entry_date: string;
-  entry_price: number;
-  exit_date: string;
-  exit_price: number;
-  expected_return: number;
-  stop_loss: number;
-  target_price: number;
-  holding_period: number;
-  volatility: number;
-}
-
-interface MutualFundRecommendation {
-  fund_name: string;
-  fund_manager: string;
-  current_performance: number;
-  investment_strategy: string;
-  is_sip_recommended: boolean;
-  sip_amount: number;
-  sip_duration_months: number;
-  lump_sum_amount: number;
-  expected_return: number;
-  expense_ratio: number;
-  risk_level: string;
-  minimum_investment: number;
-}
-
-interface GoldRecommendation {
-  investment_type: string;
-  current_performance: number;
-  investment_strategy: string;
-  entry_date: string;
-  entry_price: number;
-  exit_date: string;
-  exit_price: number;
-  expected_return: number;
-  holding_period: number;
-  volatility: number;
-  liquidity_rating: string;
-  storage_required: boolean;
-  tax_implications: string;
-}
-
-interface SectorRecommendation {
-  sector: string;
-  predicted_return: number;
-  investment_opportunities: number;
-  stocks?: StockRecommendation[];
-  mutual_funds?: MutualFundRecommendation[];
-  gold?: GoldRecommendation[];
-}
-
-interface ComprehensiveRecommendation {
-  status: string;
-  message: string;
-  recommendations: {
-    stocks: SectorRecommendation[];
-    mutual_funds: SectorRecommendation[];
-    gold: SectorRecommendation[];
-  };
-  timestamp: string;
-}
-
 interface PredictionResult {
   recommendedAllocation: {
     stocks: number;
@@ -175,12 +108,6 @@ function App() {
   // UI State
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [prediction, setPrediction] = useState<PredictionResult | null>(null);
-  const [comprehensiveData, setComprehensiveData] = useState<ComprehensiveRecommendation | null>(null);
-  
-  // Collapsible Sections for Results
-  const [showStocksSection, setShowStocksSection] = useState<boolean>(true);
-  const [showMutualFundsSection, setShowMutualFundsSection] = useState<boolean>(true);
-  const [showGoldSection, setShowGoldSection] = useState<boolean>(true);
 
   const formatCurrency = (value: string) => {
     const numericValue = value.replace(/[^0-9]/g, '');
@@ -218,25 +145,6 @@ function App() {
       case 'Low': return 3;
       case 'High': return 8;
       default: return 5; // Medium
-    }
-  };
-
-  const fetchComprehensiveData = async () => {
-    try {
-      const duration = investmentDuration && !isNaN(parseInt(investmentDuration)) ? parseInt(investmentDuration) : 12;
-      const response = await axios.get(`${API_BASE_URL}/recommend/comprehensive`, {
-        params: {
-          investment_amount: parseFloat(investmentAmount || '0'),
-          risk_tolerance: riskAppetite.toLowerCase(),
-          investment_horizon: duration
-        }
-      });
-      
-      if (response.data.status === 'success') {
-        setComprehensiveData(response.data.data);
-      }
-    } catch (error) {
-      console.error('Error fetching comprehensive data:', error);
     }
   };
 
@@ -288,23 +196,6 @@ function App() {
       };
 
       setPrediction(transformedPrediction);
-      
-      // Fetch comprehensive data separately
-      await fetchComprehensiveData();
-      
-      // Store comprehensive data if available
-      if (apiResult.comprehensive_recommendations) {
-        setComprehensiveData({
-          status: 'success',
-          message: 'Comprehensive recommendations loaded',
-          recommendations: {
-            stocks: apiResult.comprehensive_recommendations.stocks || [],
-            mutual_funds: apiResult.comprehensive_recommendations.mutual_funds || [],
-            gold: apiResult.comprehensive_recommendations.gold || []
-          },
-          timestamp: new Date().toISOString()
-        });
-      }
       
     } catch (error) {
       console.error('API Error:', error);
@@ -388,9 +279,9 @@ function App() {
         </div>
 
         <div className="max-w-full mx-auto px-4">
-          <div className="grid lg:grid-cols-5 gap-6">
-            {/* Input Form - Wider Left Column */}
-            <div className="lg:col-span-2 bg-gray-900/40 backdrop-blur-lg rounded-2xl p-4 border border-purple-800/40 shadow-2xl h-fit sticky top-4">
+          <div className="grid lg:grid-cols-6 gap-6">
+            {/* Input Form - Narrower Left Column */}
+            <div className="lg:col-span-1 bg-gray-900/40 backdrop-blur-lg rounded-2xl p-4 border border-purple-800/40 shadow-2xl h-fit sticky top-4">
               <h2 className="text-lg font-semibold text-white mb-4 flex items-center">
                 <Target className="w-4 h-4 mr-2 text-purple-400" />
                 Parameters
@@ -610,8 +501,8 @@ function App() {
               </button>
             </div>
 
-            {/* Results Panel - Right Column */}
-            <div className="lg:col-span-3 bg-gray-900/40 backdrop-blur-lg rounded-2xl p-6 border border-purple-800/40 shadow-2xl">
+            {/* Results Panel - Wider Right Column */}
+            <div className="lg:col-span-5 bg-gray-900/40 backdrop-blur-lg rounded-2xl p-6 border border-purple-800/40 shadow-2xl">
               <h2 className="text-xl font-semibold text-white mb-6 flex items-center">
                 <Award className="w-5 h-5 mr-3 text-purple-400" />
                 Investment Recommendations
@@ -799,358 +690,6 @@ function App() {
                       </div>
                     </div>
                   </div>
-
-                  {/* Comprehensive Investment Analysis */}
-                  {comprehensiveData && (
-                    <div className="mt-8 space-y-6">
-                      <h3 className="text-white font-semibold text-lg mb-4 flex items-center">
-                        <Award className="w-5 h-5 mr-2 text-purple-400" />
-                        Detailed Investment Analysis
-                      </h3>
-
-                      {/* Stocks Section */}
-                      {comprehensiveData.recommendations.stocks.length > 0 && (
-                        <div className="bg-gray-800/50 rounded-xl border border-purple-800/40">
-                          <button
-                            onClick={() => setShowStocksSection(!showStocksSection)}
-                            className="w-full flex items-center justify-between p-4 hover:bg-gray-800/30 transition-colors rounded-t-xl"
-                          >
-                            <h4 className="text-purple-400 font-medium flex items-center">
-                              <TrendingUp className="w-4 h-4 mr-2" />
-                              📊 STOCK RECOMMENDATIONS
-                            </h4>
-                            <ChevronDown className={`w-5 h-5 text-purple-400 transition-transform ${showStocksSection ? 'rotate-180' : ''}`} />
-                          </button>
-                          
-                          {showStocksSection && (
-                            <div className="p-6 pt-0">
-                              {comprehensiveData.recommendations.stocks.map((sector, index) => (
-                                <div key={index} className="mb-6 p-4 bg-gray-700/30 rounded-lg border border-purple-700/30">
-                                  {/* Sector Header */}
-                                  <div className="flex justify-between items-start mb-4">
-                                    <div>
-                                      <h5 className="text-white font-medium text-lg">{sector.sector} Sector</h5>
-                                      <div className="text-sm text-purple-300 mt-1">
-                                        🎯 Predicted Return: <span className="text-green-400 font-semibold">{sector.predicted_return.toFixed(2)}%</span> | 
-                                        🏢 Investment Opportunities: <span className="text-yellow-400 font-semibold">{sector.investment_opportunities}</span>
-                                      </div>
-                                    </div>
-                                  </div>
-
-                                  {/* Stock Recommendations */}
-                                  {sector.stocks && sector.stocks.length > 0 && (
-                                    <div>
-                                      <h6 className="text-purple-400 font-medium mb-3 flex items-center">
-                                        📈 <span className="ml-1">SPECIFIC STOCKS TO BUY:</span>
-                                      </h6>
-                                      {sector.stocks.map((stock, stockIndex) => (
-                                        <div key={stockIndex} className="mb-4 p-4 bg-gray-600/20 rounded-lg border border-gray-600/40">
-                                          {/* Stock Header */}
-                                          <div className="flex justify-between items-start mb-3">
-                                            <div>
-                                              <span className="text-white font-bold text-lg">{stock.symbol}</span>
-                                              <span className="text-purple-300 ml-2">- {stock.company_name}</span>
-                                            </div>
-                                            <div className="text-right">
-                                              <div className="text-green-400 font-bold text-lg">
-                                                {stock.current_performance.toFixed(2)}%
-                                              </div>
-                                              <div className="text-xs text-green-300">Current Performance</div>
-                                            </div>
-                                          </div>
-                                          
-                                          {/* Investment Strategy */}
-                                          <div className="text-blue-200 text-sm mb-4 p-3 bg-blue-900/20 rounded border border-blue-800/30">
-                                            📝 <strong>INVESTMENT STRATEGY:</strong> {stock.investment_strategy}
-                                          </div>
-                                          
-                                          {/* Detailed Analysis */}
-                                          <div className="bg-gray-800/40 p-3 rounded-lg border border-gray-700/50">
-                                            <div className="text-yellow-400 font-medium mb-2">⏰ DETAILED TIMING & ANALYSIS:</div>
-                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-                                              <div className="bg-green-900/20 p-2 rounded border border-green-800/30">
-                                                <div className="text-green-300 font-medium">📅 Entry Date</div>
-                                                <div className="text-white font-semibold">{stock.entry_date}</div>
-                                              </div>
-                                              <div className="bg-green-900/20 p-2 rounded border border-green-800/30">
-                                                <div className="text-green-300 font-medium">💰 Entry Price</div>
-                                                <div className="text-white font-semibold">₹{stock.entry_price}</div>
-                                              </div>
-                                              <div className="bg-blue-900/20 p-2 rounded border border-blue-800/30">
-                                                <div className="text-blue-300 font-medium">📅 Exit Date</div>
-                                                <div className="text-white font-semibold">{stock.exit_date}</div>
-                                              </div>
-                                              <div className="bg-blue-900/20 p-2 rounded border border-blue-800/30">
-                                                <div className="text-blue-300 font-medium">💰 Exit Price</div>
-                                                <div className="text-white font-semibold">₹{stock.exit_price}</div>
-                                              </div>
-                                              <div className="bg-purple-900/20 p-2 rounded border border-purple-800/30">
-                                                <div className="text-purple-300 font-medium">📊 Expected Return</div>
-                                                <div className="text-white font-semibold">{stock.expected_return.toFixed(2)}%</div>
-                                              </div>
-                                              <div className="bg-red-900/20 p-2 rounded border border-red-800/30">
-                                                <div className="text-red-300 font-medium">🛑 Stop Loss</div>
-                                                <div className="text-white font-semibold">₹{stock.stop_loss}</div>
-                                              </div>
-                                              <div className="bg-yellow-900/20 p-2 rounded border border-yellow-800/30">
-                                                <div className="text-yellow-300 font-medium">🎯 Target Price</div>
-                                                <div className="text-white font-semibold">₹{stock.target_price}</div>
-                                              </div>
-                                              <div className="bg-indigo-900/20 p-2 rounded border border-indigo-800/30">
-                                                <div className="text-indigo-300 font-medium">⏳ Holding Period</div>
-                                                <div className="text-white font-semibold">{stock.holding_period} days</div>
-                                              </div>
-                                            </div>
-                                            <div className="mt-3 bg-orange-900/20 p-2 rounded border border-orange-800/30">
-                                              <div className="text-orange-300 font-medium text-xs">📊 Volatility</div>
-                                              <div className="text-white font-semibold">{stock.volatility.toFixed(2)}%</div>
-                                            </div>
-                                          </div>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Mutual Funds Section */}
-                      {comprehensiveData.recommendations.mutual_funds.length > 0 && (
-                        <div className="bg-gray-800/50 rounded-xl border border-purple-800/40">
-                          <button
-                            onClick={() => setShowMutualFundsSection(!showMutualFundsSection)}
-                            className="w-full flex items-center justify-between p-4 hover:bg-gray-800/30 transition-colors rounded-t-xl"
-                          >
-                            <h4 className="text-purple-400 font-medium flex items-center">
-                              <Building2 className="w-4 h-4 mr-2" />
-                              💼 MUTUAL FUNDS RECOMMENDATIONS
-                            </h4>
-                            <ChevronDown className={`w-5 h-5 text-purple-400 transition-transform ${showMutualFundsSection ? 'rotate-180' : ''}`} />
-                          </button>
-                          
-                          {showMutualFundsSection && (
-                            <div className="p-6 pt-0">
-                              {comprehensiveData.recommendations.mutual_funds.map((sector, index) => (
-                                <div key={index} className="mb-6 p-4 bg-gray-700/30 rounded-lg border border-purple-700/30">
-                                  {/* Sector Header */}
-                                  <div className="flex justify-between items-start mb-4">
-                                    <div>
-                                      <h5 className="text-white font-medium text-lg">{sector.sector} Sector</h5>
-                                      <div className="text-sm text-purple-300 mt-1">
-                                        🎯 Predicted Return: <span className="text-green-400 font-semibold">{sector.predicted_return.toFixed(2)}%</span> | 
-                                        🏢 Investment Opportunities: <span className="text-yellow-400 font-semibold">{sector.investment_opportunities}</span>
-                                      </div>
-                                    </div>
-                                  </div>
-
-                                  {/* Mutual Fund Recommendations */}
-                                  {sector.mutual_funds && sector.mutual_funds.length > 0 && (
-                                    <div>
-                                      <h6 className="text-purple-400 font-medium mb-3 flex items-center">
-                                        💼 <span className="ml-1">SPECIFIC FUNDS TO INVEST:</span>
-                                      </h6>
-                                      {sector.mutual_funds.map((fund, fundIndex) => (
-                                        <div key={fundIndex} className="mb-4 p-4 bg-gray-600/20 rounded-lg border border-gray-600/40">
-                                          {/* Fund Header */}
-                                          <div className="flex justify-between items-start mb-3">
-                                            <div className="flex-1">
-                                              <div className="text-white font-bold text-lg">{fund.fund_name}</div>
-                                              <div className="text-gray-400 text-xs mt-1">Managed by: {fund.fund_manager}</div>
-                                            </div>
-                                            <div className="text-right ml-4">
-                                              <div className="text-green-400 font-bold text-lg">
-                                                {fund.current_performance.toFixed(2)}%
-                                              </div>
-                                              <div className="text-xs text-green-300">Current Performance</div>
-                                            </div>
-                                          </div>
-                                          
-                                          {/* Investment Strategy */}
-                                          <div className="text-blue-200 text-sm mb-4 p-3 bg-blue-900/20 rounded border border-blue-800/30">
-                                            📝 <strong>INVESTMENT STRATEGY:</strong> {fund.investment_strategy}
-                                          </div>
-                                          
-                                          {/* SIP vs Lump Sum Analysis */}
-                                          <div className="bg-gray-800/40 p-3 rounded-lg border border-gray-700/50">
-                                            <div className="flex items-center justify-between mb-2">
-                                              <div className="text-yellow-400 font-medium">🎯 INVESTMENT APPROACH:</div>
-                                              <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                                                fund.is_sip_recommended 
-                                                  ? 'bg-green-900/40 text-green-300 border border-green-800' 
-                                                  : 'bg-blue-900/40 text-blue-300 border border-blue-800'
-                                              }`}>
-                                                {fund.is_sip_recommended ? 'SIP Recommended' : 'Lump Sum'}
-                                              </span>
-                                            </div>
-                                            
-                                            {fund.is_sip_recommended ? (
-                                              <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-xs">
-                                                <div className="bg-green-900/20 p-2 rounded border border-green-800/30">
-                                                  <div className="text-green-300 font-medium">💰 Monthly SIP</div>
-                                                  <div className="text-white font-bold">₹{fund.sip_amount.toFixed(0)}</div>
-                                                </div>
-                                                <div className="bg-blue-900/20 p-2 rounded border border-blue-800/30">
-                                                  <div className="text-blue-300 font-medium">⏳ Duration</div>
-                                                  <div className="text-white font-bold">{fund.sip_duration_months} months</div>
-                                                </div>
-                                                <div className="bg-purple-900/20 p-2 rounded border border-purple-800/30">
-                                                  <div className="text-purple-300 font-medium">📊 Expected Return</div>
-                                                  <div className="text-white font-bold">{fund.expected_return.toFixed(2)}%</div>
-                                                </div>
-                                              </div>
-                                            ) : (
-                                              <div className="bg-blue-900/20 p-2 rounded border border-blue-800/30 mb-3">
-                                                <div className="text-blue-300 font-medium text-xs">💰 Lump Sum Investment</div>
-                                                <div className="text-white font-bold">₹{fund.lump_sum_amount.toFixed(0)}</div>
-                                              </div>
-                                            )}
-                                            
-                                            {/* Additional Fund Details */}
-                                            <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mt-3 text-xs">
-                                              <div className="bg-orange-900/20 p-2 rounded border border-orange-800/30">
-                                                <div className="text-orange-300 font-medium">📊 Expense Ratio</div>
-                                                <div className="text-white font-semibold">{fund.expense_ratio}%</div>
-                                              </div>
-                                              <div className="bg-red-900/20 p-2 rounded border border-red-800/30">
-                                                <div className="text-red-300 font-medium">⚠️ Risk Level</div>
-                                                <div className="text-white font-semibold">{fund.risk_level}</div>
-                                              </div>
-                                              <div className="bg-indigo-900/20 p-2 rounded border border-indigo-800/30">
-                                                <div className="text-indigo-300 font-medium">💎 Min Investment</div>
-                                                <div className="text-white font-semibold">₹{fund.minimum_investment}</div>
-                                              </div>
-                                            </div>
-                                          </div>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Gold Section */}
-                      {comprehensiveData.recommendations.gold.length > 0 && (
-                        <div className="bg-gray-800/50 rounded-xl border border-purple-800/40">
-                          <button
-                            onClick={() => setShowGoldSection(!showGoldSection)}
-                            className="w-full flex items-center justify-between p-4 hover:bg-gray-800/30 transition-colors rounded-t-xl"
-                          >
-                            <h4 className="text-purple-400 font-medium flex items-center">
-                              <Coins className="w-4 h-4 mr-2" />
-                              🥇 GOLD INVESTMENT RECOMMENDATIONS
-                            </h4>
-                            <ChevronDown className={`w-4 h-4 transition-transform ${showGoldSection ? 'rotate-180' : ''}`} />
-                          </button>
-                          
-                          {showGoldSection && (
-                            <div className="p-6 pt-0">
-                              {comprehensiveData.recommendations.gold.map((sector, index) => (
-                                <div key={index} className="mb-6 p-4 bg-gray-700/30 rounded-lg border border-purple-700/30">
-                                  {/* Sector Header */}
-                                  <div className="flex justify-between items-start mb-4">
-                                    <div>
-                                      <h5 className="text-white font-medium text-lg">{sector.sector}</h5>
-                                      <div className="text-sm text-purple-300 mt-1">
-                                        🎯 Predicted Return: <span className="text-green-400 font-semibold">{sector.predicted_return.toFixed(2)}%</span> | 
-                                        🏢 Investment Opportunities: <span className="text-yellow-400 font-semibold">{sector.investment_opportunities}</span>
-                                      </div>
-                                    </div>
-                                  </div>
-
-                                  {/* Gold Investment Options */}
-                                  {sector.gold && sector.gold.length > 0 && (
-                                    <div>
-                                      {sector.gold.map((gold, goldIndex) => (
-                                        <div key={goldIndex} className="mb-4 p-4 bg-gray-600/20 rounded-lg border border-gray-600/40">
-                                          {/* Gold Header */}
-                                          <div className="flex justify-between items-start mb-3">
-                                            <div>
-                                              <span className="text-white font-bold text-lg">{gold.investment_type}</span>
-                                            </div>
-                                            <div className="text-right">
-                                              <div className="text-yellow-400 font-bold text-lg">
-                                                {gold.current_performance.toFixed(2)}%
-                                              </div>
-                                              <div className="text-xs text-yellow-300">Current Performance</div>
-                                            </div>
-                                          </div>
-                                          
-                                          {/* Investment Strategy */}
-                                          <div className="text-yellow-200 text-sm mb-4 p-3 bg-yellow-900/20 rounded border border-yellow-800/30">
-                                            📝 <strong>INVESTMENT STRATEGY:</strong> {gold.investment_strategy}
-                                          </div>
-                                          
-                                          {/* Detailed Analysis */}
-                                          <div className="bg-gray-800/40 p-3 rounded-lg border border-gray-700/50">
-                                            <div className="text-yellow-400 font-medium mb-2">⏰ DETAILED ANALYSIS:</div>
-                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-                                              <div className="bg-green-900/20 p-2 rounded border border-green-800/30">
-                                                <div className="text-green-300 font-medium">📅 Entry Date</div>
-                                                <div className="text-white font-semibold">{gold.entry_date}</div>
-                                              </div>
-                                              <div className="bg-green-900/20 p-2 rounded border border-green-800/30">
-                                                <div className="text-green-300 font-medium">💰 Entry Price</div>
-                                                <div className="text-white font-semibold">₹{gold.entry_price}/gram</div>
-                                              </div>
-                                              <div className="bg-blue-900/20 p-2 rounded border border-blue-800/30">
-                                                <div className="text-blue-300 font-medium">📅 Exit Date</div>
-                                                <div className="text-white font-semibold">{gold.exit_date}</div>
-                                              </div>
-                                              <div className="bg-blue-900/20 p-2 rounded border border-blue-800/30">
-                                                <div className="text-blue-300 font-medium">💰 Exit Price</div>
-                                                <div className="text-white font-semibold">₹{gold.exit_price}/gram</div>
-                                              </div>
-                                              <div className="bg-purple-900/20 p-2 rounded border border-purple-800/30">
-                                                <div className="text-purple-300 font-medium">📊 Expected Return</div>
-                                                <div className="text-white font-semibold">{gold.expected_return.toFixed(2)}%</div>
-                                              </div>
-                                              <div className="bg-indigo-900/20 p-2 rounded border border-indigo-800/30">
-                                                <div className="text-indigo-300 font-medium">⏳ Holding Period</div>
-                                                <div className="text-white font-semibold">{gold.holding_period} days</div>
-                                              </div>
-                                              <div className="bg-orange-900/20 p-2 rounded border border-orange-800/30">
-                                                <div className="text-orange-300 font-medium">📊 Volatility</div>
-                                                <div className="text-white font-semibold">{gold.volatility.toFixed(2)}%</div>
-                                              </div>
-                                              <div className="bg-teal-900/20 p-2 rounded border border-teal-800/30">
-                                                <div className="text-teal-300 font-medium">💧 Liquidity</div>
-                                                <div className="text-white font-semibold">{gold.liquidity_rating}</div>
-                                              </div>
-                                            </div>
-                                            
-                                            {/* Storage & Tax Info */}
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-3 text-xs">
-                                              <div className={`p-2 rounded border ${gold.storage_required ? 'bg-red-900/20 border-red-800/30' : 'bg-green-900/20 border-green-800/30'}`}>
-                                                <div className={`font-medium ${gold.storage_required ? 'text-red-300' : 'text-green-300'}`}>
-                                                  🏠 Storage Required
-                                                </div>
-                                                <div className="text-white font-semibold">{gold.storage_required ? 'Yes' : 'No'}</div>
-                                              </div>
-                                              <div className="bg-gray-900/20 p-2 rounded border border-gray-800/30">
-                                                <div className="text-gray-300 font-medium">📋 Tax Implications</div>
-                                                <div className="text-white font-semibold text-xs">{gold.tax_implications}</div>
-                                              </div>
-                                            </div>
-                                          </div>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )}
                 </div>
               )}
             </div>
