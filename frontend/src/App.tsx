@@ -557,18 +557,19 @@ function App() {
               Investment Analysis & Recommendations
             </h2>
 
-            {!comprehensiveData ? (
-              <div className="text-center py-12">
-                <div className="text-purple-300 mb-4">
-                  <BarChart3 className="w-16 h-16 mx-auto mb-4 opacity-50" />
+            <div className="h-full overflow-y-auto pr-2">
+              {!comprehensiveData ? (
+                <div className="text-center py-12">
+                  <div className="text-purple-300 mb-4">
+                    <BarChart3 className="w-16 h-16 mx-auto mb-4 opacity-50" />
+                  </div>
+                  <p className="text-purple-200 text-lg mb-2">Ready to analyze your portfolio</p>
+                  <p className="text-purple-300 text-sm">
+                    Configure your investment parameters and click "Get Recommendations" to get AI-powered recommendations
+                  </p>
                 </div>
-                <p className="text-purple-200 text-lg mb-2">Ready to analyze your portfolio</p>
-                <p className="text-purple-300 text-sm">
-                  Configure your investment parameters and click "Get Recommendations" to get AI-powered recommendations
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-6 max-h-screen overflow-y-auto">
+              ) : (
+                <div className="space-y-6">
                 
                 {/* Stock Recommendations */}
                 {comprehensiveData.recommendations?.stocks && comprehensiveData.recommendations.stocks.length > 0 && (
@@ -836,6 +837,7 @@ function App() {
                 )}
               </div>
             )}
+            </div>
           </div>
         </div>
       </div>
