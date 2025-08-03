@@ -41,9 +41,9 @@ def get_comprehensive_recommendations(
         }
         
         # Stock recommendations with detailed analysis
-        if "stocks" in basic_recs:
+        if basic_recs.get("recommendations", {}).get("stocks"):
             sectors = {}
-            for stock in basic_recs["stocks"][:8]:  # Top 8 stocks
+            for stock in basic_recs["recommendations"]["stocks"][:8]:  # Top 8 stocks
                 sector = stock.get("sector", "Technology")  # Default sector
                 if sector not in sectors:
                     sectors[sector] = {
@@ -78,9 +78,9 @@ def get_comprehensive_recommendations(
             comprehensive_data["recommendations"]["stocks"] = list(sectors.values())
         
         # Mutual Fund recommendations with SIP analysis
-        if "mutual_funds" in basic_recs:
+        if basic_recs.get("recommendations", {}).get("mutual_funds"):
             mf_sectors = {}
-            for mf in basic_recs["mutual_funds"][:6]:  # Top 6 mutual funds
+            for mf in basic_recs["recommendations"]["mutual_funds"][:6]:  # Top 6 mutual funds
                 sector = mf.get("category", "Equity")
                 if sector not in mf_sectors:
                     mf_sectors[sector] = {
@@ -117,7 +117,7 @@ def get_comprehensive_recommendations(
             comprehensive_data["recommendations"]["mutual_funds"] = list(mf_sectors.values())
         
         # Gold recommendations with detailed analysis
-        if "gold" in basic_recs:
+        if basic_recs.get("recommendations", {}).get("gold"):
             gold_data = {
                 "sector": "Precious Metals",
                 "predicted_return": 8.5,  # Conservative gold return
