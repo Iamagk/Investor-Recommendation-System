@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
-import { TrendingUp, Target, BarChart3, Coins, Building2, Award, ArrowRight, CheckCircle, ChevronDown } from 'lucide-react';
 import axios from 'axios';
+import { TrendingUp, DollarSign, Target, BarChart3, Coins, Building2, Award, ArrowRight, CheckCircle, ChevronDown } from 'lucide-react';
 
-// API Configuration
 const API_BASE_URL = 'http://localhost:8000';
 
 interface InvestmentOption {
@@ -12,16 +11,10 @@ interface InvestmentOption {
   description: string;
 }
 
-interface SectorOption {
-  id: string;
-  name: string;
-}
-
 interface DetailedInvestment {
-  allocation_percent: number;
-  allocation_amount: number;
-  top_picks: any[];
-  average_expected_return: number;
+  amount: number;
+  percentage: number;
+  recommendations: string[];
 }
 
 interface StockRecommendation {
@@ -42,17 +35,17 @@ interface StockRecommendation {
 
 interface MutualFundRecommendation {
   fund_name: string;
-  fund_manager: string;
+  fund_type: string;
   current_performance: number;
   investment_strategy: string;
-  is_sip_recommended: boolean;
   sip_amount: number;
-  sip_duration_months: number;
-  lump_sum_amount: number;
+  sip_frequency: string;
   expected_return: number;
   expense_ratio: number;
-  risk_level: string;
-  minimum_investment: number;
+  risk_rating: string;
+  entry_date: string;
+  exit_date: string;
+  volatility: number;
 }
 
 interface GoldRecommendation {
@@ -66,7 +59,6 @@ interface GoldRecommendation {
   expected_return: number;
   holding_period: number;
   volatility: number;
-  liquidity_rating: string;
   storage_required: boolean;
   tax_implications: string;
 }
@@ -109,72 +101,30 @@ interface PredictionResult {
   sectorAnalysis?: any;
 }
 
-const investmentOptions: InvestmentOption[] = [
-  {
-    id: 'stocks',
-    name: 'Stocks',
-    icon: TrendingUp,
-    description: 'Individual company shares with high growth potential'
-  },
-  {
-    id: 'mutualFunds',
-    name: 'Mutual Funds',
-    icon: Building2,
-    description: 'Diversified portfolios managed by professionals'
-  },
-  {
-    id: 'gold',
-    name: 'Gold',
-    icon: Coins,
-    description: 'Precious metal investment for portfolio stability'
-  }
-];
-
-const sectorOptions: SectorOption[] = [
-  { id: 'technology', name: 'Information Technology' },
-  { id: 'finance', name: 'Banking & Finance' },
-  { id: 'energy', name: 'Energy & Oil' },
-  { id: 'healthcare', name: 'Healthcare & Pharma' },
-  { id: 'automotive', name: 'Automotive' },
-  { id: 'fmcg', name: 'FMCG & Consumer Goods' },
-  { id: 'infrastructure', name: 'Infrastructure' },
-  { id: 'metals', name: 'Metals & Mining' },
-  { id: 'telecom', name: 'Telecommunications' },
-  { id: 'realestate', name: 'Real Estate' }
-];
-
 function App() {
-  // Basic Investment Inputs
+  // Form state
   const [investmentAmount, setInvestmentAmount] = useState<string>('');
   const [riskAppetite, setRiskAppetite] = useState<string>('Medium');
+  const [minRoiExpectation, setMinRoiExpectation] = useState<number>(10);
+  const [investmentDuration, setInvestmentDuration] = useState<string>('');
+  const [portfolioStrategy, setPortfolioStrategy] = useState<string>('balanced');
+  const [useMlPrediction, setUseMlPrediction] = useState<boolean>(true);
   const [selectedSectors, setSelectedSectors] = useState<string[]>([]);
-  
-  // Time Horizon
-  const [investmentDuration, setInvestmentDuration] = useState<string>('Medium-term');
-  
-  // Asset Preferences
   const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
   
-  // Strategy Preferences
-  const [portfolioStrategy, setPortfolioStrategy] = useState<string>('Balanced Strategy');
-  const [useMlPrediction, setUseMlPrediction] = useState<boolean>(true);
-  
-  // Date Range for Backtesting
-  const [fromDate, setFromDate] = useState<string>('');
-  const [toDate, setToDate] = useState<string>('');
-  
-  // Advanced Filters
-  const [minRoiExpectation, setMinRoiExpectation] = useState<number>(8);
+  // Advanced filters
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState<boolean>(false);
   const [excludeVolatileAssets, setExcludeVolatileAssets] = useState<boolean>(false);
   const [includeOnlyLiquidAssets, setIncludeOnlyLiquidAssets] = useState<boolean>(false);
   
-  // Optional Sections Toggle
+  // Backtesting
   const [showBacktesting, setShowBacktesting] = useState<boolean>(false);
-  const [showAdvancedFilters, setShowAdvancedFilters] = useState<boolean>(false);
+  const [fromDate, setFromDate] = useState<string>('');
+  const [toDate, setToDate] = useState<string>('');
   
-  // UI State
-  const [isLoading, setIsLoading] = useState<boolean>(false);
+  // Results and UI state
   const [prediction, setPrediction] = useState<PredictionResult | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
   const [comprehensiveData, setComprehensiveData] = useState<ComprehensiveRecommendation | null>(null);
   
   // Collapsible Sections for Results
@@ -192,31 +142,22 @@ function App() {
     }).format(parseInt(numericValue) || 0);
   };
 
-  const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value.replace(/[^0-9]/g, '');
-    setInvestmentAmount(value);
-  };
+  const investmentOptions: InvestmentOption[] = [
+    { id: 'stocks', name: 'Stocks', icon: TrendingUp, description: 'Direct equity investments' },
+    { id: 'mutualFunds', name: 'Mutual Funds', icon: BarChart3, description: 'Diversified fund investments' },
+    { id: 'gold', name: 'Gold', icon: Coins, description: 'Precious metal investments' },
+  ];
 
-  const toggleOption = (optionId: string) => {
-    setSelectedOptions(prev => 
-      prev.includes(optionId) 
-        ? prev.filter(id => id !== optionId)
-        : [...prev, optionId]
-    );
-  };
-
-  const toggleSector = (sectorId: string) => {
-    setSelectedSectors(prev => 
-      prev.includes(sectorId) 
-        ? prev.filter(id => id !== sectorId)
-        : [...prev, sectorId]
-    );
-  };
+  const sectorOptions = [
+    'Technology', 'Healthcare', 'Finance', 'Energy', 'Consumer Goods',
+    'Industrial', 'Real Estate', 'Utilities', 'Materials', 'Telecommunications'
+  ];
 
   const mapRiskToNumeric = (risk: string): number => {
-    switch (risk) {
-      case 'Low': return 3;
-      case 'High': return 8;
+    switch (risk.toLowerCase()) {
+      case 'low': return 3;
+      case 'medium': return 5;
+      case 'high': return 8;
       default: return 5; // Medium
     }
   };
@@ -292,20 +233,6 @@ function App() {
       // Fetch comprehensive data separately
       await fetchComprehensiveData();
       
-      // Store comprehensive data if available
-      if (apiResult.comprehensive_recommendations) {
-        setComprehensiveData({
-          status: 'success',
-          message: 'Comprehensive recommendations loaded',
-          recommendations: {
-            stocks: apiResult.comprehensive_recommendations.stocks || [],
-            mutual_funds: apiResult.comprehensive_recommendations.mutual_funds || [],
-            gold: apiResult.comprehensive_recommendations.gold || []
-          },
-          timestamp: new Date().toISOString()
-        });
-      }
-      
     } catch (error) {
       console.error('API Error:', error);
       
@@ -334,877 +261,310 @@ function App() {
         goldPercent = (goldPercent / total) * 100;
       }
 
-      const fallbackPrediction: PredictionResult = {
+      const mockPrediction: PredictionResult = {
         recommendedAllocation: {
-          stocks: Math.round(stocksPercent),
-          mutualFunds: Math.round(mutualFundsPercent),
-          gold: Math.round(goldPercent)
+          stocks: stocksPercent,
+          mutualFunds: mutualFundsPercent,
+          gold: goldPercent
         },
-        expectedReturn: Math.round(minRoiExpectation * 0.9 + mapRiskToNumeric(riskAppetite) * 0.3),
+        expectedReturn: minRoiExpectation + (riskMultiplier * 2),
         riskScore: mapRiskToNumeric(riskAppetite),
         recommendations: [
-          `⚠️ Using fallback recommendations (API connection failed)`,
-          `Based on your ${riskAppetite} risk appetite, we recommend a ${portfolioStrategy.toLowerCase()}`,
-          `Your ${minRoiExpectation}% return expectation aligns with a diversified portfolio`,
-          `Investment duration: ${investmentDuration} - Consider rebalancing as needed`
+          `Based on your ${riskAppetite.toLowerCase()} risk appetite, we recommend a diversified portfolio.`,
+          `Target return: ${minRoiExpectation}% annually`,
+          `Investment duration: ${investmentDuration} months`
         ]
       };
 
-      setPrediction(fallbackPrediction);
+      setPrediction(mockPrediction);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const isFormValid = investmentAmount && parseFloat(investmentAmount) > 0 && selectedOptions.length > 0;
+  const handleInvestmentOptionChange = (optionId: string) => {
+    setSelectedOptions(prev => 
+      prev.includes(optionId)
+        ? prev.filter(id => id !== optionId)
+        : [...prev, optionId]
+    );
+  };
+
+  const handleSectorChange = (sector: string) => {
+    setSelectedSectors(prev => 
+      prev.includes(sector)
+        ? prev.filter(s => s !== sector)
+        : [...prev, sector]
+    );
+  };
+
+  const isFormValid = investmentAmount && selectedOptions.length > 0;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-950 to-indigo-950">
-      <div className="container mx-auto px-4 py-8">
+    <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 p-6">
+      <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="text-center mb-12">
-          <div className="mb-6">
-            <div className="inline-flex items-center justify-center w-20 h-20 bg-gray-800/60 backdrop-blur-sm rounded-full border-2 border-purple-800/50 overflow-hidden">
-              <img 
-                src="/profile.jpg" 
-                alt="Profile" 
-                className="w-full h-full object-cover"
-                onError={(e) => {
-                  const target = e.target as HTMLImageElement;
-                  target.style.display = 'none';
-                  target.nextElementSibling?.classList.remove('hidden');
-                }}
-              />
-              <BarChart3 className="w-8 h-8 text-purple-400 hidden" />
-            </div>
-          </div>
-          
-          <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">
-            Investment Advisor
+        <div className="text-center mb-8">
+          <h1 className="text-4xl font-bold text-white mb-4 flex items-center justify-center">
+            <Award className="w-10 h-10 mr-3 text-yellow-400" />
+            Smart Investment Advisor
           </h1>
-          <p className="text-xl text-purple-300 max-w-2xl mx-auto leading-relaxed">
-            Get personalized investment recommendations tailored to your financial goals and risk profile
-          </p>
+          <p className="text-purple-200 text-lg">AI-powered investment recommendations tailored for you</p>
         </div>
 
-        <div className="max-w-full mx-auto px-4">
-          <div className="grid lg:grid-cols-5 gap-6">
-            {/* Input Form - Wider Left Column */}
-            <div className="lg:col-span-2 bg-gray-900/40 backdrop-blur-lg rounded-2xl p-4 border border-purple-800/40 shadow-2xl h-fit sticky top-4">
-              <h2 className="text-lg font-semibold text-white mb-4 flex items-center">
-                <Target className="w-4 h-4 mr-2 text-purple-400" />
-                Parameters
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
+          {/* Input Panel - Left Column */}
+          <div className="lg:col-span-2 space-y-6">
+            {/* Investment Amount */}
+            <div className="bg-gray-900/40 backdrop-blur-lg rounded-2xl p-6 border border-purple-800/40 shadow-2xl">
+              <h2 className="text-xl font-semibold text-white mb-4 flex items-center">
+                <DollarSign className="w-6 h-6 mr-2 text-green-400" />
+                Investment Details
               </h2>
-
-              {/* Investment Amount */}
-              <div className="mb-6">
-                <label className="block text-purple-300 text-sm font-medium mb-2">
-                  Total Investment Amount (₹)
-                </label>
-                <div className="relative">
-                  <span className="absolute left-4 top-1/2 transform -translate-y-1/2 text-purple-400">₹</span>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-purple-200 text-sm font-medium mb-2">Investment Amount</label>
                   <input
                     type="text"
-                    value={investmentAmount ? formatCurrency(investmentAmount) : ''}
-                    onChange={handleAmountChange}
-                    placeholder="₹1,00,000"
-                    className="w-full pl-8 pr-4 py-3 bg-gray-800/50 border border-purple-800/50 rounded-xl text-white placeholder-purple-400 focus:outline-none focus:ring-2 focus:ring-purple-700 focus:border-purple-600 transition-all duration-200 shadow-inner"
+                    value={investmentAmount}
+                    onChange={(e) => setInvestmentAmount(e.target.value)}
+                    placeholder="Enter amount in INR"
+                    className="w-full px-4 py-3 rounded-xl bg-gray-800/60 border border-purple-600/40 text-white placeholder-purple-300/60 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all"
+                  />
+                  {investmentAmount && (
+                    <p className="text-green-400 text-sm mt-1">{formatCurrency(investmentAmount)}</p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-purple-200 text-sm font-medium mb-2">Investment Duration (months)</label>
+                  <input
+                    type="number"
+                    value={investmentDuration}
+                    onChange={(e) => setInvestmentDuration(e.target.value)}
+                    placeholder="e.g., 12"
+                    className="w-full px-4 py-3 rounded-xl bg-gray-800/60 border border-purple-600/40 text-white placeholder-purple-300/60 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all"
                   />
                 </div>
               </div>
-
-              {/* Risk Appetite */}
-              <div className="mb-4">
-                <label className="block text-purple-300 text-sm font-medium mb-2">
-                  Risk Appetite
-                </label>
-                <div className="grid grid-cols-3 gap-3">
-                  {['Low', 'Medium', 'High'].map((risk) => (
-                    <div
-                      key={risk}
-                      onClick={() => setRiskAppetite(risk)}
-                      className={`p-3 rounded-lg border cursor-pointer transition-all duration-200 text-center ${
-                        riskAppetite === risk
-                          ? 'bg-purple-900/40 border-purple-700 ring-2 ring-purple-800/60'
-                          : 'bg-gray-800/30 border-purple-800/40 hover:bg-gray-800/50'
-                      }`}
-                    >
-                      <span className="text-white font-medium">{risk}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Asset Preferences */}
-              <div className="mb-6">
-                <h3 className="text-lg font-medium text-white mb-3">📊 Asset Classes</h3>
-                <div className="space-y-4">
-                  {investmentOptions.map((option) => {
-                    const IconComponent = option.icon;
-                    const isSelected = selectedOptions.includes(option.id);
-                    
-                    return (
-                      <div
-                        key={option.id}
-                        onClick={() => toggleOption(option.id)}
-                        className={`p-3 rounded-xl border transition-all duration-200 cursor-pointer ${
-                          isSelected
-                            ? 'bg-purple-900/40 border-purple-700 ring-2 ring-purple-800/60 shadow-lg'
-                            : 'bg-gray-800/30 border-purple-800/40 hover:bg-gray-800/50 hover:border-purple-700/60 hover:shadow-lg'
-                        }`}
-                      >
-                        <div className="flex items-start space-x-3">
-                          <div className={`flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center ${
-                            isSelected ? 'bg-purple-800 shadow-lg' : 'bg-gray-800/60 border border-purple-800/40'
-                          }`}>
-                            {isSelected ? (
-                              <CheckCircle className="w-4 h-4 text-white" />
-                            ) : (
-                              <IconComponent className="w-4 h-4 text-purple-400" />
-                            )}
-                          </div>
-                          <div className="flex-1">
-                            <h3 className="text-white font-medium text-sm">{option.name}</h3>
-                            <p className="text-purple-300 text-xs mt-1">{option.description}</p>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Portfolio Strategy */}
-              <div className="mb-4">
-                <label className="block text-purple-300 text-sm font-medium mb-3">
-                  Portfolio Strategy
-                </label>
-                <div className="grid grid-cols-3 gap-3">
-                  {['Maximize ROI', 'Minimize Risk', 'Balanced Strategy'].map((strategy) => (
-                    <div
-                      key={strategy}
-                      onClick={() => setPortfolioStrategy(strategy)}
-                      className={`p-3 rounded-lg border cursor-pointer transition-all duration-200 text-center ${
-                        portfolioStrategy === strategy
-                          ? 'bg-purple-900/40 border-purple-700 ring-2 ring-purple-800/60'
-                          : 'bg-gray-800/30 border-purple-800/40 hover:bg-gray-800/50'
-                      }`}
-                    >
-                      <span className="text-white font-medium text-sm">{strategy}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Backtesting Section */}
-              <div className="mb-6">
-                <button
-                  onClick={() => setShowBacktesting(!showBacktesting)}
-                  className="w-full flex items-center justify-between p-3 bg-gray-800/30 rounded-lg border border-purple-800/40 hover:bg-gray-800/50 transition-colors"
-                >
-                  <h3 className="text-base font-medium text-white">📅 Backtesting Period (Optional)</h3>
-                  <ChevronDown className={`w-5 h-5 text-purple-400 transition-transform ${showBacktesting ? 'rotate-180' : ''}`} />
-                </button>
-                
-                {showBacktesting && (
-                  <div className="mt-4 p-4 bg-gray-800/20 rounded-lg border border-purple-800/30">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-purple-300 text-sm font-medium mb-2">From Date</label>
-                        <input
-                          type="date"
-                          value={fromDate}
-                          onChange={(e) => setFromDate(e.target.value)}
-                          className="w-full px-4 py-3 bg-gray-800/50 border border-purple-800/50 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-700"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-purple-300 text-sm font-medium mb-2">To Date</label>
-                        <input
-                          type="date"
-                          value={toDate}
-                          onChange={(e) => setToDate(e.target.value)}
-                          className="w-full px-4 py-3 bg-gray-800/50 border border-purple-800/50 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-700"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Advanced Filters */}
-              <div className="mb-6">
-                <button
-                  onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
-                  className="w-full flex items-center justify-between p-3 bg-gray-800/30 rounded-lg border border-purple-800/40 hover:bg-gray-800/50 transition-colors"
-                >
-                  <h3 className="text-base font-medium text-white">⚙️ Advanced Filters (Optional)</h3>
-                  <ChevronDown className={`w-5 h-5 text-purple-400 transition-transform ${showAdvancedFilters ? 'rotate-180' : ''}`} />
-                </button>
-                
-                {showAdvancedFilters && (
-                  <div className="mt-4 p-4 bg-gray-800/20 rounded-lg border border-purple-800/30">
-                    <div className="mb-4">
-                      <label className="block text-purple-300 text-sm font-medium mb-3">
-                        Minimum ROI Expectation: {minRoiExpectation}%
-                      </label>
-                      <input
-                        type="range"
-                        min="3"
-                        max="25"
-                        value={minRoiExpectation}
-                        onChange={(e) => setMinRoiExpectation(parseInt(e.target.value))}
-                        className="w-full h-2 bg-gray-800/60 rounded-lg appearance-none cursor-pointer slider"
-                      />
-                      <div className="flex justify-between text-xs text-purple-400 mt-2">
-                        <span>3%</span>
-                        <span>25%</span>
-                      </div>
-                    </div>
-
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between p-3 bg-gray-800/30 rounded-lg border border-purple-800/40">
-                        <span className="text-white">Exclude Volatile Assets</span>
-                        <input
-                          type="checkbox"
-                          checked={excludeVolatileAssets}
-                          onChange={(e) => setExcludeVolatileAssets(e.target.checked)}
-                          className="w-5 h-5 text-purple-700 bg-gray-800 border-purple-800 rounded focus:ring-purple-700"
-                        />
-                      </div>
-                      <div className="flex items-center justify-between p-3 bg-gray-800/30 rounded-lg border border-purple-800/40">
-                        <span className="text-white">Include Only Liquid Assets</span>
-                        <input
-                          type="checkbox"
-                          checked={includeOnlyLiquidAssets}
-                          onChange={(e) => setIncludeOnlyLiquidAssets(e.target.checked)}
-                          className="w-5 h-5 text-purple-700 bg-gray-800 border-purple-800 rounded focus:ring-purple-700"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Get Recommendations Button */}
-              <button
-                onClick={runPrediction}
-                disabled={!isFormValid || isLoading}
-                className={`w-full py-4 px-6 rounded-xl font-semibold text-white transition-all duration-200 flex items-center justify-center space-x-2 ${
-                  isFormValid && !isLoading
-                    ? 'bg-gradient-to-r from-purple-800 to-indigo-800 hover:from-purple-700 hover:to-indigo-700 shadow-xl hover:shadow-purple-800/40 transform hover:scale-[1.02] border border-purple-700/60'
-                    : 'bg-gray-800/60 cursor-not-allowed opacity-50 border border-gray-700/60'
-                }`}
-              >
-                {isLoading ? (
-                  <>
-                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                    <span>Analyzing Your Portfolio...</span>
-                  </>
-                ) : (
-                  <>
-                    <span>Get Recommendations</span>
-                    <ArrowRight className="w-5 h-5" />
-                  </>
-                )}
-              </button>
             </div>
 
-            {/* Results Panel - Right Column */}
-            <div className="lg:col-span-3 bg-gray-900/40 backdrop-blur-lg rounded-2xl p-6 border border-purple-800/40 shadow-2xl">
-              <h2 className="text-xl font-semibold text-white mb-6 flex items-center">
-                <Award className="w-5 h-5 mr-3 text-purple-400" />
-                Investment Recommendations
+            {/* Risk and Returns */}
+            <div className="bg-gray-900/40 backdrop-blur-lg rounded-2xl p-6 border border-purple-800/40 shadow-2xl">
+              <h2 className="text-xl font-semibold text-white mb-4 flex items-center">
+                <Target className="w-6 h-6 mr-2 text-red-400" />
+                Risk & Returns
               </h2>
 
-              {!prediction ? (
-                <div className="text-center py-12">
-                  <div className="w-16 h-16 bg-gray-800/60 backdrop-blur-sm rounded-full flex items-center justify-center mx-auto mb-4 border border-purple-800/40">
-                    <BarChart3 className="w-8 h-8 text-purple-400" />
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-purple-200 text-sm font-medium mb-2">Risk Appetite</label>
+                  <select
+                    value={riskAppetite}
+                    onChange={(e) => setRiskAppetite(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl bg-gray-800/60 border border-purple-600/40 text-white focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all"
+                  >
+                    <option value="Low">Low Risk</option>
+                    <option value="Medium">Medium Risk</option>
+                    <option value="High">High Risk</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-purple-200 text-sm font-medium mb-2">
+                    Expected Return: {minRoiExpectation}% annually
+                  </label>
+                  <input
+                    type="range"
+                    min="5"
+                    max="25"
+                    value={minRoiExpectation}
+                    onChange={(e) => setMinRoiExpectation(parseInt(e.target.value))}
+                    className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer slider"
+                  />
+                  <div className="flex justify-between text-xs text-purple-300 mt-1">
+                    <span>5%</span>
+                    <span>25%</span>
                   </div>
-                  <p className="text-purple-300 text-lg mb-4">
-                    Configure your investment parameters and click "Get Recommendations" to get AI-powered recommendations
-                  </p>
-                  <div className="text-sm text-purple-400 bg-gray-800/30 rounded-lg p-3 border border-purple-800/40">
-                    <div className="flex items-center justify-center space-x-2">
-                      <div className="w-2 h-2 bg-green-400 rounded-full"></div>
-                      <span>Connected to AI Investment Engine</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Investment Options */}
+            <div className="bg-gray-900/40 backdrop-blur-lg rounded-2xl p-6 border border-purple-800/40 shadow-2xl">
+              <h2 className="text-xl font-semibold text-white mb-4 flex items-center">
+                <Building2 className="w-6 h-6 mr-2 text-blue-400" />
+                Investment Options
+              </h2>
+
+              <div className="space-y-3">
+                {investmentOptions.map((option) => (
+                  <label key={option.id} className="flex items-center p-3 rounded-xl bg-gray-800/40 border border-gray-700/50 hover:border-purple-600/50 cursor-pointer transition-all">
+                    <input
+                      type="checkbox"
+                      checked={selectedOptions.includes(option.id)}
+                      onChange={() => handleInvestmentOptionChange(option.id)}
+                      className="sr-only"
+                    />
+                    <div className={`w-5 h-5 rounded border-2 mr-3 flex items-center justify-center transition-all ${
+                      selectedOptions.includes(option.id)
+                        ? 'bg-purple-600 border-purple-600'
+                        : 'border-gray-600'
+                    }`}>
+                      {selectedOptions.includes(option.id) && (
+                        <CheckCircle className="w-3 h-3 text-white" />
+                      )}
+                    </div>
+                    <option.icon className="w-5 h-5 mr-3 text-purple-300" />
+                    <div>
+                      <div className="text-white font-medium">{option.name}</div>
+                      <div className="text-purple-300 text-sm">{option.description}</div>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {/* Get Recommendations Button */}
+            <button
+              onClick={runPrediction}
+              disabled={!isFormValid || isLoading}
+              className={`w-full py-4 px-6 rounded-xl font-semibold text-white transition-all duration-200 flex items-center justify-center space-x-2 ${
+                isFormValid && !isLoading
+                  ? 'bg-gradient-to-r from-purple-800 to-indigo-800 hover:from-purple-700 hover:to-indigo-700 shadow-xl hover:shadow-purple-800/40 transform hover:scale-[1.02] border border-purple-700/60'
+                  : 'bg-gray-800/60 cursor-not-allowed opacity-50 border border-gray-700/60'
+              }`}
+            >
+              {isLoading ? (
+                <>
+                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                  <span>Analyzing Your Portfolio...</span>
+                </>
+              ) : (
+                <>
+                  <span>Get Recommendations</span>
+                  <ArrowRight className="w-5 h-5" />
+                </>
+              )}
+            </button>
+          </div>
+
+          {/* Results Panel - Right Column */}
+          <div className="lg:col-span-3 bg-gray-900/40 backdrop-blur-lg rounded-2xl p-6 border border-purple-800/40 shadow-2xl">
+            <h2 className="text-xl font-semibold text-white mb-6 flex items-center">
+              <TrendingUp className="w-6 h-6 mr-2 text-green-400" />
+              Investment Analysis
+            </h2>
+
+            {!prediction ? (
+              <div className="text-center py-12">
+                <div className="text-purple-300 mb-4">
+                  <BarChart3 className="w-16 h-16 mx-auto mb-4 opacity-50" />
+                </div>
+                <p className="text-purple-200 text-lg mb-2">Ready to analyze your portfolio</p>
+                <p className="text-purple-300 text-sm">
+                  Configure your investment parameters and click "Get Recommendations" to get AI-powered recommendations
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {/* Investment Breakdown */}
+                <div className="bg-gray-800/50 rounded-xl p-6 border border-purple-700/50">
+                  <h3 className="text-lg font-semibold text-white mb-4 flex items-center">
+                    <BarChart3 className="w-5 h-5 mr-2 text-blue-400" />
+                    Investment Breakdown
+                  </h3>
+                  
+                  <div className="space-y-4">
+                    {prediction.recommendedAllocation.stocks > 0 && (
+                      <div className="flex items-center justify-between p-3 bg-purple-900/20 rounded-lg border border-purple-800/30">
+                        <div className="flex items-center">
+                          <TrendingUp className="w-5 h-5 mr-3 text-purple-400" />
+                          <span className="text-white font-medium">Stocks</span>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-purple-300 font-bold">{prediction.recommendedAllocation.stocks.toFixed(1)}%</div>
+                          <div className="text-green-400 text-sm">
+                            {formatCurrency((parseFloat(investmentAmount) * prediction.recommendedAllocation.stocks / 100).toString())}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {prediction.recommendedAllocation.mutualFunds > 0 && (
+                      <div className="flex items-center justify-between p-3 bg-blue-900/20 rounded-lg border border-blue-800/30">
+                        <div className="flex items-center">
+                          <BarChart3 className="w-5 h-5 mr-3 text-blue-400" />
+                          <span className="text-white font-medium">Mutual Funds</span>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-blue-300 font-bold">{prediction.recommendedAllocation.mutualFunds.toFixed(1)}%</div>
+                          <div className="text-green-400 text-sm">
+                            {formatCurrency((parseFloat(investmentAmount) * prediction.recommendedAllocation.mutualFunds / 100).toString())}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {prediction.recommendedAllocation.gold > 0 && (
+                      <div className="flex items-center justify-between p-3 bg-yellow-900/20 rounded-lg border border-yellow-800/30">
+                        <div className="flex items-center">
+                          <Coins className="w-5 h-5 mr-3 text-yellow-400" />
+                          <span className="text-white font-medium">Gold</span>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-yellow-300 font-bold">{prediction.recommendedAllocation.gold.toFixed(1)}%</div>
+                          <div className="text-green-400 text-sm">
+                            {formatCurrency((parseFloat(investmentAmount) * prediction.recommendedAllocation.gold / 100).toString())}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Expected Returns */}
+                <div className="bg-gray-800/50 rounded-xl p-6 border border-green-700/50">
+                  <h3 className="text-lg font-semibold text-white mb-4 flex items-center">
+                    <Target className="w-5 h-5 mr-2 text-green-400" />
+                    Expected Performance
+                  </h3>
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="text-center p-4 bg-green-900/20 rounded-lg border border-green-800/30">
+                      <div className="text-green-400 text-2xl font-bold">{prediction.expectedReturn.toFixed(1)}%</div>
+                      <div className="text-green-300 text-sm">Annual Return</div>
+                    </div>
+                    <div className="text-center p-4 bg-blue-900/20 rounded-lg border border-blue-800/30">
+                      <div className="text-blue-400 text-2xl font-bold">{prediction.riskScore}/10</div>
+                      <div className="text-blue-300 text-sm">Risk Score</div>
                     </div>
                   </div>
                 </div>
-              ) : (
-                <div className="space-y-6">
-                  {/* Summary Stats */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-gray-800/50 rounded-xl p-4 border border-purple-800/40 shadow-lg">
-                      <div className="text-purple-400 text-sm font-medium">Expected Return</div>
-                      <div className="text-2xl font-bold text-white">{prediction.expectedReturn}%</div>
-                    </div>
-                    <div className="bg-gray-800/50 rounded-xl p-4 border border-purple-800/40 shadow-lg">
-                      <div className="text-purple-400 text-sm font-medium">Risk Score</div>
-                      <div className="text-2xl font-bold text-white">{prediction.riskScore}/10</div>
-                    </div>
-                  </div>
 
-                  {/* Allocation Chart */}
-                  <div>
-                    <h3 className="text-white font-semibold mb-4">Recommended Allocation</h3>
+                {/* Recommendations */}
+                {prediction.recommendations && prediction.recommendations.length > 0 && (
+                  <div className="bg-gray-800/50 rounded-xl p-6 border border-blue-700/50">
+                    <h3 className="text-lg font-semibold text-white mb-4 flex items-center">
+                      <Award className="w-5 h-5 mr-2 text-yellow-400" />
+                      AI Recommendations
+                    </h3>
+                    
                     <div className="space-y-3">
-                      {prediction.recommendedAllocation.stocks > 0 && (
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-3">
-                            <TrendingUp className="w-5 h-5 text-purple-400" />
-                            <span className="text-white">Stocks</span>
-                          </div>
-                          <div className="flex items-center space-x-3">
-                            <div className="w-24 h-2 bg-gray-800/60 rounded-full overflow-hidden border border-purple-800/30">
-                              <div 
-                                className="h-full bg-gradient-to-r from-purple-700 to-indigo-700 transition-all duration-500"
-                                style={{ width: `${prediction.recommendedAllocation.stocks}%` }}
-                              ></div>
-                            </div>
-                            <span className="text-white font-medium w-12 text-right">{prediction.recommendedAllocation.stocks}%</span>
-                          </div>
-                        </div>
-                      )}
-                      
-                      {prediction.recommendedAllocation.mutualFunds > 0 && (
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-3">
-                            <Building2 className="w-5 h-5 text-purple-400" />
-                            <span className="text-white">Mutual Funds</span>
-                          </div>
-                          <div className="flex items-center space-x-3">
-                            <div className="w-24 h-2 bg-gray-800/60 rounded-full overflow-hidden border border-purple-800/30">
-                              <div 
-                                className="h-full bg-gradient-to-r from-purple-700 to-indigo-700 transition-all duration-500"
-                                style={{ width: `${prediction.recommendedAllocation.mutualFunds}%` }}
-                              ></div>
-                            </div>
-                            <span className="text-white font-medium w-12 text-right">{prediction.recommendedAllocation.mutualFunds}%</span>
-                          </div>
-                        </div>
-                      )}
-
-                      {prediction.recommendedAllocation.gold > 0 && (
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-3">
-                            <Coins className="w-5 h-5 text-purple-400" />
-                            <span className="text-white">Gold</span>
-                          </div>
-                          <div className="flex items-center space-x-3">
-                            <div className="w-24 h-2 bg-gray-800/60 rounded-full overflow-hidden border border-purple-800/30">
-                              <div 
-                                className="h-full bg-gradient-to-r from-purple-700 to-indigo-700 transition-all duration-500"
-                                style={{ width: `${prediction.recommendedAllocation.gold}%` }}
-                              ></div>
-                            </div>
-                            <span className="text-white font-medium w-12 text-right">{prediction.recommendedAllocation.gold}%</span>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Recommendations */}
-                  <div>
-                    <h3 className="text-white font-semibold mb-4">AI Recommendations</h3>
-                    <div className="space-y-3">
-                      {prediction.recommendations.map((rec, index) => (
-                        <div key={index} className="flex items-start space-x-3 p-3 bg-gray-800/30 rounded-lg border border-purple-800/40 shadow-md">
-                          <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
-                          <p className="text-purple-200 text-sm leading-relaxed">{rec}</p>
+                      {prediction.recommendations.map((recommendation, index) => (
+                        <div key={index} className="p-3 bg-blue-900/20 rounded-lg border border-blue-800/30">
+                          <p className="text-blue-200 text-sm">{recommendation}</p>
                         </div>
                       ))}
                     </div>
                   </div>
-
-                  {/* Investment Breakdown */}
-                  <div>
-                    <h3 className="text-white font-semibold mb-4">Investment Breakdown</h3>
-                    <div className="space-y-3">
-                      {prediction.recommendedAllocation.stocks > 0 && (
-                        <div>
-                          <div className="flex justify-between items-center mb-2">
-                            <span className="text-purple-300">Stocks</span>
-                            <span className="text-white font-semibold">
-                              {formatCurrency(((prediction.recommendedAllocation.stocks / 100) * parseInt(investmentAmount || '0')).toString())}
-                            </span>
-                          </div>
-                          {prediction.detailedInvestments?.stocks && (
-                            <div className="ml-4 text-sm space-y-1">
-                              <div className="text-purple-400">
-                                Expected Return: {prediction.detailedInvestments.stocks.average_expected_return?.toFixed(1)}%
-                              </div>
-                              {prediction.detailedInvestments.stocks.top_picks?.length > 0 && (
-                                <div className="text-purple-400">
-                                  Top Pick: {prediction.detailedInvestments.stocks.top_picks[0]?.name || 'N/A'}
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                      {prediction.recommendedAllocation.mutualFunds > 0 && (
-                        <div>
-                          <div className="flex justify-between items-center mb-2">
-                            <span className="text-purple-300">Mutual Funds</span>
-                            <span className="text-white font-semibold">
-                              {formatCurrency(((prediction.recommendedAllocation.mutualFunds / 100) * parseInt(investmentAmount || '0')).toString())}
-                            </span>
-                          </div>
-                          {prediction.detailedInvestments?.mutualFunds && (
-                            <div className="ml-4 text-sm space-y-1">
-                              <div className="text-purple-400">
-                                Expected Return: {prediction.detailedInvestments.mutualFunds.average_expected_return?.toFixed(1)}%
-                              </div>
-                              {prediction.detailedInvestments.mutualFunds.top_picks?.length > 0 && (
-                                <div className="text-purple-400">
-                                  Top Pick: {prediction.detailedInvestments.mutualFunds.top_picks[0]?.name || 'N/A'}
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                      {prediction.recommendedAllocation.gold > 0 && (
-                        <div>
-                          <div className="flex justify-between items-center mb-2">
-                            <span className="text-purple-300">Gold</span>
-                            <span className="text-white font-semibold">
-                              {formatCurrency(((prediction.recommendedAllocation.gold / 100) * parseInt(investmentAmount || '0')).toString())}
-                            </span>
-                          </div>
-                          {prediction.detailedInvestments?.gold && (
-                            <div className="ml-4 text-sm space-y-1">
-                              <div className="text-purple-400">
-                                Expected Return: {prediction.detailedInvestments.gold.average_expected_return?.toFixed(1)}%
-                              </div>
-                              {prediction.detailedInvestments.gold.top_picks?.length > 0 && (
-                                <div className="text-purple-400">
-                                  Type: {prediction.detailedInvestments.gold.top_picks[0]?.type || 'ETF'}
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                      <div className="border-t border-purple-800/40 pt-3 mt-3">
-                        <div className="flex justify-between items-center">
-                          <span className="text-white font-semibold">Total Investment</span>
-                          <span className="text-white font-bold text-lg">
-                            {formatCurrency(investmentAmount || '0')}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Comprehensive Investment Analysis */}
-                  {comprehensiveData && (
-                    <div className="mt-8 space-y-6">
-                      <h3 className="text-white font-semibold text-lg mb-4 flex items-center">
-                        <Award className="w-5 h-5 mr-2 text-purple-400" />
-                        Detailed Investment Analysis
-                      </h3>
-
-                      {/* Stocks Section */}
-                      {comprehensiveData.recommendations.stocks.length > 0 && (
-                        <div className="bg-gray-800/50 rounded-xl border border-purple-800/40">
-                          <button
-                            onClick={() => setShowStocksSection(!showStocksSection)}
-                            className="w-full flex items-center justify-between p-4 hover:bg-gray-800/30 transition-colors rounded-t-xl"
-                          >
-                            <h4 className="text-purple-400 font-medium flex items-center">
-                              <TrendingUp className="w-4 h-4 mr-2" />
-                              📊 STOCK RECOMMENDATIONS
-                            </h4>
-                            <ChevronDown className={`w-5 h-5 text-purple-400 transition-transform ${showStocksSection ? 'rotate-180' : ''}`} />
-                          </button>
-                          
-                          {showStocksSection && (
-                            <div className="p-6 pt-0">
-                              {comprehensiveData.recommendations.stocks.map((sector, index) => (
-                                <div key={index} className="mb-6 p-4 bg-gray-700/30 rounded-lg border border-purple-700/30">
-                                  {/* Sector Header */}
-                                  <div className="flex justify-between items-start mb-4">
-                                    <div>
-                                      <h5 className="text-white font-medium text-lg">{sector.sector} Sector</h5>
-                                      <div className="text-sm text-purple-300 mt-1">
-                                        🎯 Predicted Return: <span className="text-green-400 font-semibold">{sector.predicted_return.toFixed(2)}%</span> | 
-                                        🏢 Investment Opportunities: <span className="text-yellow-400 font-semibold">{sector.investment_opportunities}</span>
-                                      </div>
-                                    </div>
-                                  </div>
-
-                                  {/* Stock Recommendations */}
-                                  {sector.stocks && sector.stocks.length > 0 && (
-                                    <div>
-                                      <h6 className="text-purple-400 font-medium mb-3 flex items-center">
-                                        📈 <span className="ml-1">SPECIFIC STOCKS TO BUY:</span>
-                                      </h6>
-                                      {sector.stocks.map((stock, stockIndex) => (
-                                        <div key={stockIndex} className="mb-4 p-4 bg-gray-600/20 rounded-lg border border-gray-600/40">
-                                          {/* Stock Header */}
-                                          <div className="flex justify-between items-start mb-3">
-                                            <div>
-                                              <span className="text-white font-bold text-lg">{stock.symbol}</span>
-                                              <span className="text-purple-300 ml-2">- {stock.company_name}</span>
-                                            </div>
-                                            <div className="text-right">
-                                              <div className="text-green-400 font-bold text-lg">
-                                                {stock.current_performance.toFixed(2)}%
-                                              </div>
-                                              <div className="text-xs text-green-300">Current Performance</div>
-                                            </div>
-                                          </div>
-                                          
-                                          {/* Investment Strategy */}
-                                          <div className="text-blue-200 text-sm mb-4 p-3 bg-blue-900/20 rounded border border-blue-800/30">
-                                            📝 <strong>INVESTMENT STRATEGY:</strong> {stock.investment_strategy}
-                                          </div>
-                                          
-                                          {/* Detailed Analysis */}
-                                          <div className="bg-gray-800/40 p-3 rounded-lg border border-gray-700/50">
-                                            <div className="text-yellow-400 font-medium mb-2">⏰ DETAILED TIMING & ANALYSIS:</div>
-                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-                                              <div className="bg-green-900/20 p-2 rounded border border-green-800/30">
-                                                <div className="text-green-300 font-medium">📅 Entry Date</div>
-                                                <div className="text-white font-semibold">{stock.entry_date}</div>
-                                              </div>
-                                              <div className="bg-green-900/20 p-2 rounded border border-green-800/30">
-                                                <div className="text-green-300 font-medium">💰 Entry Price</div>
-                                                <div className="text-white font-semibold">₹{stock.entry_price}</div>
-                                              </div>
-                                              <div className="bg-blue-900/20 p-2 rounded border border-blue-800/30">
-                                                <div className="text-blue-300 font-medium">📅 Exit Date</div>
-                                                <div className="text-white font-semibold">{stock.exit_date}</div>
-                                              </div>
-                                              <div className="bg-blue-900/20 p-2 rounded border border-blue-800/30">
-                                                <div className="text-blue-300 font-medium">💰 Exit Price</div>
-                                                <div className="text-white font-semibold">₹{stock.exit_price}</div>
-                                              </div>
-                                              <div className="bg-purple-900/20 p-2 rounded border border-purple-800/30">
-                                                <div className="text-purple-300 font-medium">📊 Expected Return</div>
-                                                <div className="text-white font-semibold">{stock.expected_return.toFixed(2)}%</div>
-                                              </div>
-                                              <div className="bg-red-900/20 p-2 rounded border border-red-800/30">
-                                                <div className="text-red-300 font-medium">🛑 Stop Loss</div>
-                                                <div className="text-white font-semibold">₹{stock.stop_loss}</div>
-                                              </div>
-                                              <div className="bg-yellow-900/20 p-2 rounded border border-yellow-800/30">
-                                                <div className="text-yellow-300 font-medium">🎯 Target Price</div>
-                                                <div className="text-white font-semibold">₹{stock.target_price}</div>
-                                              </div>
-                                              <div className="bg-indigo-900/20 p-2 rounded border border-indigo-800/30">
-                                                <div className="text-indigo-300 font-medium">⏳ Holding Period</div>
-                                                <div className="text-white font-semibold">{stock.holding_period} days</div>
-                                              </div>
-                                            </div>
-                                            <div className="mt-3 bg-orange-900/20 p-2 rounded border border-orange-800/30">
-                                              <div className="text-orange-300 font-medium text-xs">📊 Volatility</div>
-                                              <div className="text-white font-semibold">{stock.volatility.toFixed(2)}%</div>
-                                            </div>
-                                          </div>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Mutual Funds Section */}
-                      {comprehensiveData.recommendations.mutual_funds.length > 0 && (
-                        <div className="bg-gray-800/50 rounded-xl border border-purple-800/40">
-                          <button
-                            onClick={() => setShowMutualFundsSection(!showMutualFundsSection)}
-                            className="w-full flex items-center justify-between p-4 hover:bg-gray-800/30 transition-colors rounded-t-xl"
-                          >
-                            <h4 className="text-purple-400 font-medium flex items-center">
-                              <Building2 className="w-4 h-4 mr-2" />
-                              💼 MUTUAL FUNDS RECOMMENDATIONS
-                            </h4>
-                            <ChevronDown className={`w-5 h-5 text-purple-400 transition-transform ${showMutualFundsSection ? 'rotate-180' : ''}`} />
-                          </button>
-                          
-                          {showMutualFundsSection && (
-                            <div className="p-6 pt-0">
-                              {comprehensiveData.recommendations.mutual_funds.map((sector, index) => (
-                                <div key={index} className="mb-6 p-4 bg-gray-700/30 rounded-lg border border-purple-700/30">
-                                  {/* Sector Header */}
-                                  <div className="flex justify-between items-start mb-4">
-                                    <div>
-                                      <h5 className="text-white font-medium text-lg">{sector.sector} Sector</h5>
-                                      <div className="text-sm text-purple-300 mt-1">
-                                        🎯 Predicted Return: <span className="text-green-400 font-semibold">{sector.predicted_return.toFixed(2)}%</span> | 
-                                        🏢 Investment Opportunities: <span className="text-yellow-400 font-semibold">{sector.investment_opportunities}</span>
-                                      </div>
-                                    </div>
-                                  </div>
-
-                                  {/* Mutual Fund Recommendations */}
-                                  {sector.mutual_funds && sector.mutual_funds.length > 0 && (
-                                    <div>
-                                      <h6 className="text-purple-400 font-medium mb-3 flex items-center">
-                                        💼 <span className="ml-1">SPECIFIC FUNDS TO INVEST:</span>
-                                      </h6>
-                                      {sector.mutual_funds.map((fund, fundIndex) => (
-                                        <div key={fundIndex} className="mb-4 p-4 bg-gray-600/20 rounded-lg border border-gray-600/40">
-                                          {/* Fund Header */}
-                                          <div className="flex justify-between items-start mb-3">
-                                            <div className="flex-1">
-                                              <div className="text-white font-bold text-lg">{fund.fund_name}</div>
-                                              <div className="text-gray-400 text-xs mt-1">Managed by: {fund.fund_manager}</div>
-                                            </div>
-                                            <div className="text-right ml-4">
-                                              <div className="text-green-400 font-bold text-lg">
-                                                {fund.current_performance.toFixed(2)}%
-                                              </div>
-                                              <div className="text-xs text-green-300">Current Performance</div>
-                                            </div>
-                                          </div>
-                                          
-                                          {/* Investment Strategy */}
-                                          <div className="text-blue-200 text-sm mb-4 p-3 bg-blue-900/20 rounded border border-blue-800/30">
-                                            📝 <strong>INVESTMENT STRATEGY:</strong> {fund.investment_strategy}
-                                          </div>
-                                          
-                                          {/* SIP vs Lump Sum Analysis */}
-                                          <div className="bg-gray-800/40 p-3 rounded-lg border border-gray-700/50">
-                                            <div className="flex items-center justify-between mb-2">
-                                              <div className="text-yellow-400 font-medium">🎯 INVESTMENT APPROACH:</div>
-                                              <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                                                fund.is_sip_recommended 
-                                                  ? 'bg-green-900/40 text-green-300 border border-green-800' 
-                                                  : 'bg-blue-900/40 text-blue-300 border border-blue-800'
-                                              }`}>
-                                                {fund.is_sip_recommended ? 'SIP Recommended' : 'Lump Sum'}
-                                              </span>
-                                            </div>
-                                            
-                                            {fund.is_sip_recommended ? (
-                                              <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-xs">
-                                                <div className="bg-green-900/20 p-2 rounded border border-green-800/30">
-                                                  <div className="text-green-300 font-medium">💰 Monthly SIP</div>
-                                                  <div className="text-white font-bold">₹{fund.sip_amount.toFixed(0)}</div>
-                                                </div>
-                                                <div className="bg-blue-900/20 p-2 rounded border border-blue-800/30">
-                                                  <div className="text-blue-300 font-medium">⏳ Duration</div>
-                                                  <div className="text-white font-bold">{fund.sip_duration_months} months</div>
-                                                </div>
-                                                <div className="bg-purple-900/20 p-2 rounded border border-purple-800/30">
-                                                  <div className="text-purple-300 font-medium">📊 Expected Return</div>
-                                                  <div className="text-white font-bold">{fund.expected_return.toFixed(2)}%</div>
-                                                </div>
-                                              </div>
-                                            ) : (
-                                              <div className="bg-blue-900/20 p-2 rounded border border-blue-800/30 mb-3">
-                                                <div className="text-blue-300 font-medium text-xs">💰 Lump Sum Investment</div>
-                                                <div className="text-white font-bold">₹{fund.lump_sum_amount.toFixed(0)}</div>
-                                              </div>
-                                            )}
-                                            
-                                            {/* Additional Fund Details */}
-                                            <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mt-3 text-xs">
-                                              <div className="bg-orange-900/20 p-2 rounded border border-orange-800/30">
-                                                <div className="text-orange-300 font-medium">📊 Expense Ratio</div>
-                                                <div className="text-white font-semibold">{fund.expense_ratio}%</div>
-                                              </div>
-                                              <div className="bg-red-900/20 p-2 rounded border border-red-800/30">
-                                                <div className="text-red-300 font-medium">⚠️ Risk Level</div>
-                                                <div className="text-white font-semibold">{fund.risk_level}</div>
-                                              </div>
-                                              <div className="bg-indigo-900/20 p-2 rounded border border-indigo-800/30">
-                                                <div className="text-indigo-300 font-medium">💎 Min Investment</div>
-                                                <div className="text-white font-semibold">₹{fund.minimum_investment}</div>
-                                              </div>
-                                            </div>
-                                          </div>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Gold Section */}
-                      {comprehensiveData.recommendations.gold.length > 0 && (
-                        <div className="bg-gray-800/50 rounded-xl border border-purple-800/40">
-                          <button
-                            onClick={() => setShowGoldSection(!showGoldSection)}
-                            className="w-full flex items-center justify-between p-4 hover:bg-gray-800/30 transition-colors rounded-t-xl"
-                          >
-                            <h4 className="text-purple-400 font-medium flex items-center">
-                              <Coins className="w-4 h-4 mr-2" />
-                              🥇 GOLD INVESTMENT RECOMMENDATIONS
-                            </h4>
-                            <ChevronDown className={`w-4 h-4 transition-transform ${showGoldSection ? 'rotate-180' : ''}`} />
-                          </button>
-                          
-                          {showGoldSection && (
-                            <div className="p-6 pt-0">
-                              {comprehensiveData.recommendations.gold.map((sector, index) => (
-                                <div key={index} className="mb-6 p-4 bg-gray-700/30 rounded-lg border border-purple-700/30">
-                                  {/* Sector Header */}
-                                  <div className="flex justify-between items-start mb-4">
-                                    <div>
-                                      <h5 className="text-white font-medium text-lg">{sector.sector}</h5>
-                                      <div className="text-sm text-purple-300 mt-1">
-                                        🎯 Predicted Return: <span className="text-green-400 font-semibold">{sector.predicted_return.toFixed(2)}%</span> | 
-                                        🏢 Investment Opportunities: <span className="text-yellow-400 font-semibold">{sector.investment_opportunities}</span>
-                                      </div>
-                                    </div>
-                                  </div>
-
-                                  {/* Gold Investment Options */}
-                                  {sector.gold && sector.gold.length > 0 && (
-                                    <div>
-                                      {sector.gold.map((gold, goldIndex) => (
-                                        <div key={goldIndex} className="mb-4 p-4 bg-gray-600/20 rounded-lg border border-gray-600/40">
-                                          {/* Gold Header */}
-                                          <div className="flex justify-between items-start mb-3">
-                                            <div>
-                                              <span className="text-white font-bold text-lg">{gold.investment_type}</span>
-                                            </div>
-                                            <div className="text-right">
-                                              <div className="text-yellow-400 font-bold text-lg">
-                                                {gold.current_performance.toFixed(2)}%
-                                              </div>
-                                              <div className="text-xs text-yellow-300">Current Performance</div>
-                                            </div>
-                                          </div>
-                                          
-                                          {/* Investment Strategy */}
-                                          <div className="text-yellow-200 text-sm mb-4 p-3 bg-yellow-900/20 rounded border border-yellow-800/30">
-                                            📝 <strong>INVESTMENT STRATEGY:</strong> {gold.investment_strategy}
-                                          </div>
-                                          
-                                          {/* Detailed Analysis */}
-                                          <div className="bg-gray-800/40 p-3 rounded-lg border border-gray-700/50">
-                                            <div className="text-yellow-400 font-medium mb-2">⏰ DETAILED ANALYSIS:</div>
-                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-                                              <div className="bg-green-900/20 p-2 rounded border border-green-800/30">
-                                                <div className="text-green-300 font-medium">📅 Entry Date</div>
-                                                <div className="text-white font-semibold">{gold.entry_date}</div>
-                                              </div>
-                                              <div className="bg-green-900/20 p-2 rounded border border-green-800/30">
-                                                <div className="text-green-300 font-medium">💰 Entry Price</div>
-                                                <div className="text-white font-semibold">₹{gold.entry_price}/gram</div>
-                                              </div>
-                                              <div className="bg-blue-900/20 p-2 rounded border border-blue-800/30">
-                                                <div className="text-blue-300 font-medium">📅 Exit Date</div>
-                                                <div className="text-white font-semibold">{gold.exit_date}</div>
-                                              </div>
-                                              <div className="bg-blue-900/20 p-2 rounded border border-blue-800/30">
-                                                <div className="text-blue-300 font-medium">💰 Exit Price</div>
-                                                <div className="text-white font-semibold">₹{gold.exit_price}/gram</div>
-                                              </div>
-                                              <div className="bg-purple-900/20 p-2 rounded border border-purple-800/30">
-                                                <div className="text-purple-300 font-medium">📊 Expected Return</div>
-                                                <div className="text-white font-semibold">{gold.expected_return.toFixed(2)}%</div>
-                                              </div>
-                                              <div className="bg-indigo-900/20 p-2 rounded border border-indigo-800/30">
-                                                <div className="text-indigo-300 font-medium">⏳ Holding Period</div>
-                                                <div className="text-white font-semibold">{gold.holding_period} days</div>
-                                              </div>
-                                              <div className="bg-orange-900/20 p-2 rounded border border-orange-800/30">
-                                                <div className="text-orange-300 font-medium">📊 Volatility</div>
-                                                <div className="text-white font-semibold">{gold.volatility.toFixed(2)}%</div>
-                                              </div>
-                                              <div className="bg-teal-900/20 p-2 rounded border border-teal-800/30">
-                                                <div className="text-teal-300 font-medium">💧 Liquidity</div>
-                                                <div className="text-white font-semibold">{gold.liquidity_rating}</div>
-                                              </div>
-                                            </div>
-                                            
-                                            {/* Storage & Tax Info */}
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-3 text-xs">
-                                              <div className={`p-2 rounded border ${gold.storage_required ? 'bg-red-900/20 border-red-800/30' : 'bg-green-900/20 border-green-800/30'}`}>
-                                                <div className={`font-medium ${gold.storage_required ? 'text-red-300' : 'text-green-300'}`}>
-                                                  🏠 Storage Required
-                                                </div>
-                                                <div className="text-white font-semibold">{gold.storage_required ? 'Yes' : 'No'}</div>
-                                              </div>
-                                              <div className="bg-gray-900/20 p-2 rounded border border-gray-800/30">
-                                                <div className="text-gray-300 font-medium">📋 Tax Implications</div>
-                                                <div className="text-white font-semibold text-xs">{gold.tax_implications}</div>
-                                              </div>
-                                            </div>
-                                          </div>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
-
-      <style>{`
-        .slider::-webkit-slider-thumb {
-          appearance: none;
-          width: 20px;
-          height: 20px;
-          background: linear-gradient(135deg, #6B46C1, #7C3AED);
-          border-radius: 50%;
-          cursor: pointer;
-          box-shadow: 0 4px 12px rgba(107, 70, 193, 0.4);
-          transition: all 0.2s ease;
-        }
-        
-        .slider::-webkit-slider-thumb:hover {
-          transform: scale(1.1);
-          box-shadow: 0 6px 16px rgba(107, 70, 193, 0.6);
-        }
-        
-        .slider::-webkit-slider-track {
-          background: rgba(31, 41, 55, 0.6);
-          height: 8px;
-          border-radius: 4px;
-          border: 1px solid rgba(107, 70, 193, 0.3);
-        }
-        
-        .slider::-moz-range-thumb {
-          width: 20px;
-          height: 20px;
-          background: linear-gradient(135deg, #6B46C1, #7C3AED);
-          border-radius: 50%;
-          cursor: pointer;
-          border: none;
-          box-shadow: 0 4px 12px rgba(107, 70, 193, 0.4);
-          transition: all 0.2s ease;
-        }
-        
-        .slider::-moz-range-thumb:hover {
-          transform: scale(1.1);
-          box-shadow: 0 6px 16px rgba(107, 70, 193, 0.6);
-        }
-        
-        .slider::-moz-range-track {
-          background: rgba(31, 41, 55, 0.6);
-          height: 8px;
-          border-radius: 4px;
-          border: 1px solid rgba(107, 70, 193, 0.3);
-        }
-      `}</style>
     </div>
   );
 }
