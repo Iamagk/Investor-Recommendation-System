@@ -78,7 +78,8 @@ def get_comprehensive_recommendations(
                     "stop_loss": stock.get("current_price", 100) * 0.85,  # 15% stop loss
                     "target_price": stock.get("current_price", 100) * (1 + stock.get("predicted_return", 10.0) / 100),
                     "holding_period": investment_horizon * 30,
-                    "volatility": stock.get("volatility", 15.0)  # Default volatility
+                    "volatility": stock.get("volatility", 15.0),  # Default volatility
+                    "current_price": stock.get("current_price", 100)
                 }
                 
                 sectors[sector]["stocks"].append(enhanced_stock)
@@ -117,7 +118,8 @@ def get_comprehensive_recommendations(
                     "lump_sum_amount": investment_amount if not is_sip_recommended else 0,
                     "expense_ratio": mf.get("expense_ratio", 1.5),
                     "risk_level": risk_tolerance.title(),
-                    "minimum_investment": 500 if is_sip_recommended else 5000
+                    "minimum_investment": 500 if is_sip_recommended else 5000,
+                    "nav": mf.get("nav", mf.get("current_nav", 100.0))
                 }
                 
                 mf_sectors[sector]["mutual_funds"].append(enhanced_mf)
@@ -150,7 +152,8 @@ def get_comprehensive_recommendations(
                     "volatility": 12.0 - (i * 2),  # ETF less volatile than physical
                     "liquidity_rating": ["High", "High", "Medium", "Medium"][i],
                     "storage_required": "Physical" in gold_item.get("name", ""),
-                    "tax_implications": "LTCG after 3 years" if "Physical" in gold_item.get("name", "") else "STCG/LTCG as per equity"
+                    "tax_implications": "LTCG after 3 years" if "Physical" in gold_item.get("name", "") else "STCG/LTCG as per equity",
+                    "current_price": gold_item.get("current_price", 6500 + (i * 100))
                 }
                 
                 gold_data["gold"].append(enhanced_gold)

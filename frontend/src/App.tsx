@@ -25,6 +25,7 @@ interface StockRecommendation {
   target_price: number;
   holding_period: number;
   volatility: number;
+  current_price?: number;
 }
 
 interface MutualFundRecommendation {
@@ -40,6 +41,7 @@ interface MutualFundRecommendation {
   expense_ratio: number;
   risk_level: string;
   minimum_investment: number;
+  nav?: number;
 }
 
 interface GoldRecommendation {
@@ -56,6 +58,7 @@ interface GoldRecommendation {
   liquidity_rating: string;
   storage_required: boolean;
   tax_implications: string;
+  current_price?: number;
 }
 
 interface SectorRecommendation {
@@ -646,7 +649,7 @@ function App() {
                             {sector.sector} Sector
                           </h4>
                           <div className="text-right">
-                            <div className="text-green-400 font-bold">+{sector.predicted_return.toFixed(1)}%</div>
+                            <div className="text-green-400 font-bold">+{(sector.predicted_return * 100).toFixed(1)}%</div>
                             <div className="text-purple-300 text-sm">{sector.investment_opportunities} stocks</div>
                           </div>
                         </div>
@@ -659,12 +662,16 @@ function App() {
                                 <p className="text-purple-300 text-sm">{stock.company_name}</p>
                               </div>
                               <div className="text-right">
-                                <div className="text-green-400 font-bold">+{stock.expected_return.toFixed(1)}%</div>
+                                <div className="text-green-400 font-bold">+{(stock.expected_return * 100).toFixed(1)}%</div>
                                 <div className="text-gray-400 text-sm">Expected Return</div>
                               </div>
                             </div>
                             
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-3">
+                            <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-3">
+                              <div className="text-center p-2 bg-purple-900/20 rounded">
+                                <div className="text-purple-300 font-bold">₹{stock.current_price?.toFixed(2) || stock.entry_price.toFixed(2)}</div>
+                                <div className="text-purple-200 text-xs">Current Price</div>
+                              </div>
                               <div className="text-center p-2 bg-blue-900/20 rounded">
                                 <div className="text-blue-300 font-bold">₹{stock.entry_price.toFixed(2)}</div>
                                 <div className="text-blue-200 text-xs">Entry Price</div>
@@ -732,7 +739,7 @@ function App() {
                             {sector.sector} Funds
                           </h4>
                           <div className="text-right">
-                            <div className="text-green-400 font-bold">+{sector.predicted_return.toFixed(1)}%</div>
+                            <div className="text-green-400 font-bold">+{(sector.predicted_return * 100).toFixed(1)}%</div>
                             <div className="text-blue-300 text-sm">{sector.investment_opportunities} funds</div>
                           </div>
                         </div>
@@ -745,12 +752,16 @@ function App() {
                                 <p className="text-blue-300 text-sm">Fund Manager: {fund.fund_manager}</p>
                               </div>
                               <div className="text-right">
-                                <div className="text-green-400 font-bold">+{fund.expected_return.toFixed(1)}%</div>
+                                <div className="text-green-400 font-bold">+{(fund.expected_return * 100).toFixed(1)}%</div>
                                 <div className="text-gray-400 text-sm">Expected Return</div>
                               </div>
                             </div>
                             
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-3">
+                            <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-3">
+                              <div className="text-center p-2 bg-purple-900/20 rounded">
+                                <div className="text-purple-300 font-bold">₹{fund.nav || 'N/A'}</div>
+                                <div className="text-purple-200 text-xs">Current NAV</div>
+                              </div>
                               <div className="text-center p-2 bg-blue-900/20 rounded">
                                 <div className="text-blue-300 font-bold">{fund.expense_ratio.toFixed(2)}%</div>
                                 <div className="text-blue-200 text-xs">Expense Ratio</div>
@@ -759,9 +770,9 @@ function App() {
                                 <div className="text-green-300 font-bold">+{fund.current_performance.toFixed(1)}%</div>
                                 <div className="text-green-200 text-xs">Current Performance</div>
                               </div>
-                              <div className="text-center p-2 bg-purple-900/20 rounded">
-                                <div className="text-purple-300 font-bold">{fund.risk_level}</div>
-                                <div className="text-purple-200 text-xs">Risk Level</div>
+                              <div className="text-center p-2 bg-orange-900/20 rounded">
+                                <div className="text-orange-300 font-bold">{fund.risk_level}</div>
+                                <div className="text-orange-200 text-xs">Risk Level</div>
                               </div>
                               <div className="text-center p-2 bg-yellow-900/20 rounded">
                                 <div className="text-yellow-300 font-bold">₹{fund.minimum_investment}</div>
@@ -822,7 +833,7 @@ function App() {
                             {sector.sector} Investment
                           </h4>
                           <div className="text-right">
-                            <div className="text-green-400 font-bold">+{sector.predicted_return.toFixed(1)}%</div>
+                            <div className="text-green-400 font-bold">+{(sector.predicted_return * 100).toFixed(1)}%</div>
                             <div className="text-yellow-300 text-sm">{sector.investment_opportunities} options</div>
                           </div>
                         </div>
@@ -835,12 +846,16 @@ function App() {
                                 <p className="text-yellow-300 text-sm">Liquidity: {gold.liquidity_rating}</p>
                               </div>
                               <div className="text-right">
-                                <div className="text-green-400 font-bold">+{gold.expected_return.toFixed(1)}%</div>
+                                <div className="text-green-400 font-bold">+{(gold.expected_return * 100).toFixed(1)}%</div>
                                 <div className="text-gray-400 text-sm">Expected Return</div>
                               </div>
                             </div>
                             
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-3">
+                            <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-3">
+                              <div className="text-center p-2 bg-purple-900/20 rounded">
+                                <div className="text-purple-300 font-bold">₹{gold.current_price?.toFixed(2) || gold.entry_price.toFixed(2)}</div>
+                                <div className="text-purple-200 text-xs">Current Price</div>
+                              </div>
                               <div className="text-center p-2 bg-blue-900/20 rounded">
                                 <div className="text-blue-300 font-bold">₹{gold.entry_price.toFixed(2)}</div>
                                 <div className="text-blue-200 text-xs">Entry Price</div>
@@ -853,9 +868,9 @@ function App() {
                                 <div className="text-yellow-300 font-bold">{gold.volatility.toFixed(1)}%</div>
                                 <div className="text-purple-200 text-xs">Volatility</div>
                               </div>
-                              <div className="text-center p-2 bg-purple-900/20 rounded">
-                                <div className="text-purple-300 font-bold">{gold.storage_required ? 'Yes' : 'No'}</div>
-                                <div className="text-purple-200 text-xs">Storage Needed</div>
+                              <div className="text-center p-2 bg-orange-900/20 rounded">
+                                <div className="text-orange-300 font-bold">{gold.storage_required ? 'Yes' : 'No'}</div>
+                                <div className="text-orange-200 text-xs">Storage Needed</div>
                               </div>
                             </div>
                             

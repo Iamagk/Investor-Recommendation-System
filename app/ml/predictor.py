@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 from typing import Optional, List, Dict, Any
 from sqlalchemy.orm import Session
 from sklearn.ensemble import RandomForestRegressor, VotingRegressor
@@ -954,7 +955,7 @@ def train_and_save_ensemble_models(db: Session, asset_type: str = "stocks"):
         rf_pred = rf.predict(X_test)
         xgb_pred = xgb.predict(X_test)
         ensemble_pred = (rf_pred + xgb_pred) / 2
-        rmse = mean_squared_error(y_test, ensemble_pred, squared=False)
+        rmse = np.sqrt(mean_squared_error(y_test, ensemble_pred))
         
         print("Ensemble models trained and saved successfully!")
         return {
