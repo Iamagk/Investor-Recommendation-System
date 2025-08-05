@@ -14,8 +14,8 @@ def start_server():
     print("🚀 Starting Investment Recommender Server...")
     print(f"📁 Project: {project_root}")
     print(f"🐍 Python: {python_path}")
-    print("🌐 Server will be available at: http://localhost:8000")
-    print("📚 API docs will be available at: http://localhost:8000/docs")
+    print("🌐 Server will be available at: http://localhost:8002")
+    print("📚 API docs will be available at: http://localhost:8002/docs")
     print("\n" + "="*60)
     
     try:
@@ -23,7 +23,7 @@ def start_server():
         os.chdir(project_root)
         
         # Start the server
-        cmd = [python_path, "-m", "uvicorn", "app.main:app", "--reload", "--port", "8000"]
+        cmd = [python_path, "-m", "uvicorn", "app.main:app", "--reload", "--port", "8002"]
         subprocess.run(cmd)
         
     except KeyboardInterrupt:

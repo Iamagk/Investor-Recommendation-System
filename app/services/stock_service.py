@@ -1,6 +1,8 @@
 import yfinance as yf
 from typing import List, Dict, Any
 import time
+import random
+from datetime import datetime
 
 def get_nifty_500_stocks():
     """Get optimized stock data from Yahoo Finance - focused on top Indian stocks"""
@@ -17,56 +19,127 @@ def get_nifty_500_stocks():
         }
 
 def get_top_indian_stocks():
-    """Get top 100 Indian stocks from Yahoo Finance with optimized performance"""
+    """Get a randomized selection of Indian stocks from Yahoo Finance with variety each time"""
     
-    # Curated list of top 100 Indian stocks across sectors
-    top_stocks = [
-        # Top 20 by market cap
+    # Expanded list of 200+ Indian stocks across all sectors for variety
+    all_stocks = [
+        # Top 30 by market cap (higher probability)
         "RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS", "HINDUNILVR.NS",
         "ICICIBANK.NS", "SBIN.NS", "BHARTIARTL.NS", "ITC.NS", "KOTAKBANK.NS",
         "LT.NS", "AXISBANK.NS", "ASIANPAINT.NS", "MARUTI.NS", "NESTLEIND.NS",
         "ULTRACEMCO.NS", "TITAN.NS", "WIPRO.NS", "BAJFINANCE.NS", "SUNPHARMA.NS",
-        
-        # Banking & Financial Services
         "BAJAJFINSV.NS", "HDFCLIFE.NS", "SBILIFE.NS", "INDUSINDBK.NS", "ICICIGI.NS",
-        "HDFCAMC.NS", "PFC.NS", "RECLTD.NS", "CHOLAFIN.NS", "MUTHOOTFIN.NS",
+        "HDFCAMC.NS", "POWERGRID.NS", "COALINDIA.NS", "NTPC.NS", "ONGC.NS",
         
-        # Information Technology
-        "HCLTECH.NS", "TECHM.NS", "LTI.NS", "MINDTREE.NS", "MPHASIS.NS",
-        "PERSISTENT.NS", "LTTS.NS", "OFSS.NS", "COFORGE.NS", "NIITTECH.NS",
+        # Banking & Financial Services (40+ stocks)
+        "PFC.NS", "RECLTD.NS", "CHOLAFIN.NS", "MUTHOOTFIN.NS", "SHRIRAMFIN.NS",
+        "MAZDOCK.NS", "IDFC.NS", "BANKINDIA.NS", "IDFCFIRSTB.NS", "FEDERALBNK.NS",
+        "CANBK.NS", "PNB.NS", "UNIONBANK.NS", "BANKBARODA.NS", "INDIANB.NS",
+        "RBLBANK.NS", "YESBANK.NS", "EQUITASBNK.NS", "UJJIVAN.NS", "AUBANK.NS",
+        "DCBBANK.NS", "SOUTHBANK.NS", "IOB.NS", "CENTRALBK.NS", "PSB.NS",
+        "J&KBANK.NS", "KARURBANK.NS", "TMGBANK.NS", "CITYUNION.NS", "DHANLAXMI.NS",
+        "NAINITAL.NS", "UJJIVANSFB.NS", "ESAFSFB.NS", "JANABANK.NS", "FINPIPE.NS",
+        "MANAPPURAM.NS", "AAVAS.NS", "GRUH.NS", "REPCO.NS", "CAPF.NS",
         
-        # Energy & Utilities
-        "ONGC.NS", "NTPC.NS", "POWERGRID.NS", "COALINDIA.NS", "IOC.NS",
-        "BPCL.NS", "HINDPETRO.NS", "GAIL.NS", "TATAPOWER.NS", "ADANIPORTS.NS",
+        # Information Technology (30+ stocks)  
+        "HCLTECH.NS", "TECHM.NS", "MINDTREE.NS", "MPHASIS.NS", "PERSISTENT.NS", 
+        "LTTS.NS", "OFSS.NS", "COFORGE.NS", "HEXAWARE.NS", "CYIENT.NS",
+        "RUPA.NS", "POLYCAB.NS", "KPITTECH.NS", "ZENSAR.NS", "SONATSOFTW.NS",
+        "NIITTECH.NS", "INTELLECT.NS", "RAMCOCEM.NS", "MASTEK.NS", "ROUTE.NS",
+        "NEWGEN.NS", "BIRLASOFT.NS", "DATAPATTNS.NS", "RAJESHEXPO.NS", "TANLA.NS",
+        "BHARATGEAR.NS", "SUBEXLTD.NS", "MINDACORP.NS", "BARTRONICS.NS", "AXISCADES.NS",
         
-        # Consumer Goods & FMCG
+        # Energy & Utilities (25+ stocks)
+        "IOC.NS", "BPCL.NS", "HINDPETRO.NS", "GAIL.NS", "TATAPOWER.NS", 
+        "ADANIPORTS.NS", "ADANIENT.NS", "ADANIGREEN.NS", "ADANITRANS.NS", "NHPC.NS",
+        "SJVN.NS", "THERMAX.NS", "BHEL.NS", "CESC.NS", "TORNTPOWER.NS",
+        "JSW.NS", "RELCAPITAL.NS", "GUJGAS.NS", "IGL.NS", "MGL.NS",
+        "PETRONET.NS", "GSPL.NS", "AEGISCHEM.NS", "DEEPAKNI.NS", "KIRIINDUS.NS",
+        
+        
+        # Consumer Goods & FMCG (30+ stocks)
         "BRITANNIA.NS", "DABUR.NS", "MARICO.NS", "GODREJCP.NS", "COLPAL.NS",
         "TATACONSUM.NS", "UBL.NS", "VBL.NS", "EMAMILTD.NS", "JYOTHYLAB.NS",
+        "PGHH.NS", "GILLETTE.NS", "HONAUT.NS", "VGUARD.NS", "BATAINDIA.NS",
+        "RELAXO.NS", "PAGEIND.NS", "ADVENZYMES.NS", "FINEORG.NS", "ZYDUSWELL.NS",
+        "ABBOTINDIA.NS", "SANOFI.NS", "GLAXO.NS", "PFIZER.NS", "NOVARTIS.NS",
+        "3MINDIA.NS", "CASTROLIND.NS", "SCHAEFFLER.NS", "SKFINDIA.NS", "TIMKEN.NS",
         
-        # Automotive
+        # Automotive (25+ stocks)
         "TATAMOTORS.NS", "M&M.NS", "BAJAJ-AUTO.NS", "HEROMOTOCO.NS", "EICHERMOT.NS",
         "ASHOKLEY.NS", "TVSMOTOR.NS", "ESCORTS.NS", "MRF.NS", "APOLLOTYRE.NS",
+        "BALKRISIND.NS", "CEATLTD.NS", "JK.NS", "MOTHERSUMI.NS", "BOSCHLTD.NS",
+        "MAHINDCIE.NS", "BHARATFORG.NS", "RAMKRISHNA.NS", "MINDAIND.NS", "ENDURANCE.NS",
+        "SUBROS.NS", "LUMAX.NS", "FIEM.NS", "GABRIEL.NS", "TIINDIA.NS",
         
-        # Metals & Mining
+        # Metals & Mining (20+ stocks)
         "TATASTEEL.NS", "JSWSTEEL.NS", "HINDALCO.NS", "VEDL.NS", "SAIL.NS",
         "JINDALSTEL.NS", "NMDC.NS", "MOIL.NS", "HINDZINC.NS", "NATIONALUM.NS",
+        "COALINDIA.NS", "WELCORP.NS", "WELSPUNIND.NS", "JSPL.NS", "KALYANI.NS",
+        "RATNAMANI.NS", "GRAVITA.NS", "APLAPOLLO.NS", "JINDALPOLY.NS", "ORIENTCEM.NS",
         
-        # Pharmaceuticals
-        "DRREDDY.NS", "CIPLA.NS", "DIVISLAB.NS", "BIOCON.NS", 
-        "TORNTPHARM.NS", "AUROPHARMA.NS", "LUPIN.NS", "ALKEM.NS", "GLENMARK.NS",
+        # Pharmaceuticals (25+ stocks)
+        "DRREDDY.NS", "CIPLA.NS", "DIVISLAB.NS", "BIOCON.NS", "TORNTPHARM.NS", 
+        "AUROPHARMA.NS", "LUPIN.NS", "ALKEM.NS", "GLENMARK.NS", "CADILAHC.NS",
+        "STRIDES.NS", "LALPATHLAB.NS", "THYROCARE.NS", "METROPOLIS.NS", "KRSNAA.NS",
+        "SEQUENT.NS", "AAVAS.NS", "SUVEN.NS", "NATCOPHAR.NS", "GRANULES.NS",
+        "AJANTPHARM.NS", "DIVIS.NS", "REDDY.NS", "MANKIND.NS", "ERIS.NS",
         
-        # Cement & Construction
-        "SHREECEM.NS", "GRASIM.NS", "ACC.NS", "AMBUJACEM.NS",
+        # Cement & Construction (15+ stocks)
+        "SHREECEM.NS", "GRASIM.NS", "ACC.NS", "AMBUJACEM.NS", "JKCEMENT.NS",
+        "HEIDELBERG.NS", "ORIENTCEM.NS", "CENTURYTEX.NS", "RAMCOCEM.NS", "PRISMCEM.NS",
+        "INDIACEM.NS", "J&KBANK.NS", "KESORAMIND.NS", "STARCEMENT.NS", "SANGAMIND.NS",
         
-        # Telecom & Media
-        "IDEA.NS", "ZEEL.NS", "SUNTV.NS", "NETWORK18.NS", "TVTODAY.NS"
+        # Telecom & Media (15+ stocks)
+        "IDEA.NS", "ZEEL.NS", "SUNTV.NS", "NETWORK18.NS", "TVTODAY.NS",
+        "HATHWAY.NS", "DISHTTV.NS", "GTLINFRA.NS", "RCOM.NS", "TTML.NS",
+        "SAREGAMA.NS", "BALAJITELE.NS", "PURAVANKARA.NS", "ADLABS.NS", "ENIL.NS",
+        
+        # Textiles & Apparel (20+ stocks)  
+        "RAYMOND.NS", "ARVIND.NS", "RUPA.NS", "PAGEIND.NS", "WELSPUNIND.NS",
+        "VARDHMAN.NS", "TRIDENT.NS", "ALOKTEXT.NS", "BANSWRAS.NS", "CENTEX.NS",
+        "GARFIBRES.NS", "HIMATSEIDE.NS", "INDORAMA.NS", "JAICORPLTD.NS", "KPR.NS",
+        "KPRMILL.NS", "LAXMIMACH.NS", "NITIN.NS", "PATSPIN.NS", "SPENTEX.NS",
+        
+        # Agriculture & Food Processing (15+ stocks)
+        "RALLIS.NS", "UPL.NS", "COROMANDEL.NS", "INSECTICID.NS", "ZUARI.NS",
+        "MADRASFERT.NS", "GSFC.NS", "NFL.NS", "RCF.NS", "FACT.NS",
+        "KRIBHCO.NS", "SHREYAS.NS", "PATANJALI.NS", "DAAWAT.NS", "VSTIND.NS"
     ]
     
     # Remove delisted stocks that cause errors
-    delisted_stocks = ["LTI.NS", "MINDTREE.NS", "NIITTECH.NS", "CADILAHC.NS", "DALMIACEM.NS"]
-    top_stocks = [stock for stock in top_stocks if stock not in delisted_stocks]
+    delisted_stocks = ["LTI.NS", "NIITTECH.NS", "CADILAHC.NS", "DALMIACEM.NS", "RCOM.NS", "ALOKTEXT.NS"]
+    all_stocks = [stock for stock in all_stocks if stock not in delisted_stocks]
     
-    print(f"Fetching data for {len(top_stocks)} top Indian stocks...")
+    # **ROTATION LOGIC**: Select different stocks each time
+    # Create seed based on current date for daily rotation
+    today_seed = int(datetime.now().strftime("%Y%m%d"))
+    random.seed(today_seed)
+    
+    # Select 60-80 stocks randomly (varies each day)
+    min_stocks = 60
+    max_stocks = min(80, len(all_stocks))
+    num_stocks = random.randint(min_stocks, max_stocks)
+    
+    # Ensure we always include some top performers (first 30 stocks)
+    guaranteed_stocks = all_stocks[:30]  # Top 30 market cap stocks
+    remaining_stocks = all_stocks[30:]   # Rest of the stocks
+    
+    # Randomly select additional stocks
+    additional_needed = num_stocks - len(guaranteed_stocks)
+    if additional_needed > 0:
+        additional_stocks = random.sample(remaining_stocks, min(additional_needed, len(remaining_stocks)))
+        selected_stocks = guaranteed_stocks + additional_stocks
+    else:
+        selected_stocks = guaranteed_stocks[:num_stocks]
+    
+    # Shuffle the final list for variety
+    random.shuffle(selected_stocks)
+    
+    print(f"📊 Daily Stock Selection: {len(selected_stocks)} stocks (Seed: {today_seed})")
+    print(f"🔄 Rotation ensures different stocks each day!")
+    
+    print(f"Fetching data for {len(selected_stocks)} selected Indian stocks...")
     start_time = time.time()
     
     stocks = []
@@ -116,7 +189,7 @@ def get_top_indian_stocks():
     stocks = []
     failed_stocks = []
     
-    for i, symbol in enumerate(top_stocks):
+    for i, symbol in enumerate(selected_stocks):
         try:
             # Add delay between each request to avoid rate limiting
             if i > 0:
@@ -129,7 +202,7 @@ def get_top_indian_stocks():
                 failed_stocks.append(symbol)
                 
             if (i + 1) % 15 == 0:
-                print(f"Progress: {len(stocks)} successful, {len(failed_stocks)} failed out of {i + 1} attempted")
+                print(f"Progress: {len(stocks)} successful, {len(failed_stocks)} failed out of {i + 1} attempted (Total planned: {len(selected_stocks)})")
                 
         except Exception as e:
             print(f"Failed to process {symbol}: {e}")

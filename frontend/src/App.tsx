@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import axios from 'axios';
 import { TrendingUp, DollarSign, Target, BarChart3, Coins, Building2, Award, ArrowRight, CheckCircle, ChevronDown } from 'lucide-react';
 
-const API_BASE_URL = 'http://localhost:8000';
+const API_BASE_URL = 'http://localhost:8002';
 
 interface InvestmentOption {
   id: string;
@@ -191,14 +191,13 @@ function App() {
   const isFormValid = investmentAmount && investmentDuration && selectedOptions.length > 0;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 p-6">
+        <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 p-6">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-white mb-4 flex items-center justify-center">
-            <Award className="w-10 h-10 mr-3 text-yellow-400" />
-            Smart Investment Advisor
-          </h1>
+                  <h1 className="text-4xl font-bold text-purple-200 mb-8 text-center">
+          Investment Recommender
+        </h1>
           <p className="text-purple-200 text-lg">AI-powered investment recommendations tailored for you</p>
         </div>
 
@@ -215,15 +214,36 @@ function App() {
               <div className="space-y-4">
                 <div>
                   <label className="block text-purple-200 text-sm font-medium mb-2">Investment Amount</label>
-                  <input
-                    type="text"
-                    value={investmentAmount}
-                    onChange={(e) => setInvestmentAmount(e.target.value)}
-                    placeholder="Enter amount in INR"
-                    className="w-full px-4 py-3 rounded-xl bg-gray-800/60 border border-purple-600/40 text-white placeholder-purple-300/60 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all"
-                  />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {/* Quick Amount Selector */}
+                    <div>
+                      <label className="block text-purple-300 text-xs font-medium mb-1">Quick Select</label>
+                      <select
+                        value=""
+                        onChange={(e) => setInvestmentAmount(e.target.value)}
+                        className="w-full px-4 py-3 rounded-xl bg-gray-800/60 border border-purple-600/40 text-white focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all"
+                      >
+                        <option value="">Select Amount</option>
+                        <option value="1000">₹1,000</option>
+                        <option value="10000">₹10,000</option>
+                        <option value="100000">₹1,00,000</option>
+                      </select>
+                    </div>
+                    
+                    {/* Custom Amount Input */}
+                    <div>
+                      <label className="block text-purple-300 text-xs font-medium mb-1">Custom Amount</label>
+                      <input
+                        type="text"
+                        value={investmentAmount}
+                        onChange={(e) => setInvestmentAmount(e.target.value)}
+                        placeholder="Enter amount in INR"
+                        className="w-full px-4 py-3 rounded-xl bg-gray-800/60 border border-purple-600/40 text-white placeholder-purple-300/60 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all"
+                      />
+                    </div>
+                  </div>
                   {investmentAmount && (
-                    <p className="text-green-400 text-sm mt-1">{formatCurrency(investmentAmount)}</p>
+                    <p className="text-green-400 text-sm mt-2">{formatCurrency(investmentAmount)}</p>
                   )}
                 </div>
               </div>
@@ -526,6 +546,38 @@ function App() {
               )}
             </div>
 
+            {/* Futures and Options */}
+            <div className="bg-gray-900/40 backdrop-blur-lg rounded-2xl p-6 border border-purple-800/40 shadow-2xl">
+              <h2 className="text-xl font-semibold text-white mb-4 flex items-center">
+                <TrendingUp className="w-6 h-6 mr-2 text-purple-400" />
+                Futures and Options
+              </h2>
+              
+              <div className="space-y-4">
+                <p className="text-purple-200 text-sm mb-4">
+                  Advanced trading strategies and F&O predictions powered by machine learning
+                </p>
+                
+                <a 
+                  href="https://ml-fno-prediction.vercel.app/" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="block w-full px-4 py-3 rounded-xl bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-600 hover:to-indigo-600 text-white text-center font-medium transition-all duration-200 border border-purple-600/50 hover:border-purple-500 shadow-lg hover:shadow-purple-700/40 transform hover:scale-[1.02]"
+                >
+                  <div className="flex items-center justify-center space-x-2">
+                    <span>Open F&O Predictor</span>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                    </svg>
+                  </div>
+                </a>
+                
+                <div className="text-xs text-purple-300 text-center">
+                  External ML-powered F&O analysis platform
+                </div>
+              </div>
+            </div>
+
             {/* Get Recommendations Button */}
             <button
               onClick={runPrediction}
@@ -576,7 +628,7 @@ function App() {
                   <div className="bg-gray-800/50 rounded-xl p-6 border border-purple-700/50">
                     <div className="flex items-center justify-between mb-4 cursor-pointer" onClick={() => setShowStocksSection(!showStocksSection)}>
                       <h3 className="text-lg font-semibold text-white flex items-center">
-                        <TrendingUp className="w-5 h-5 mr-2 text-purple-400" />
+                        <TrendingUp className="w-5 h-5 mr-2 text-yellow-400" />
                         Stock Recommendations ({comprehensiveData.recommendations.stocks.reduce((acc, sector) => acc + sector.investment_opportunities, 0)} opportunities)
                       </h3>
                       <ChevronDown className={`w-5 h-5 text-white transition-transform ${showStocksSection ? 'rotate-180' : ''}`} />
@@ -622,7 +674,7 @@ function App() {
                               </div>
                               <div className="text-center p-2 bg-yellow-900/20 rounded">
                                 <div className="text-yellow-300 font-bold">{stock.volatility.toFixed(1)}%</div>
-                                <div className="text-yellow-200 text-xs">Volatility</div>
+                                <div className="text-purple-200 text-xs">Volatility</div>
                               </div>
                             </div>
                             
@@ -708,7 +760,7 @@ function App() {
                               </div>
                               <div className="text-center p-2 bg-yellow-900/20 rounded">
                                 <div className="text-yellow-300 font-bold">₹{fund.minimum_investment}</div>
-                                <div className="text-yellow-200 text-xs">Min Investment</div>
+                                <div className="text-purple-200 text-xs">Min Investment</div>
                               </div>
                             </div>
                             
@@ -761,7 +813,7 @@ function App() {
                     {showGoldSection && comprehensiveData.recommendations.gold.map((sector, sectorIndex) => (
                       <div key={sectorIndex} className="mb-6 last:mb-0">
                         <div className="flex items-center justify-between mb-4 p-3 bg-yellow-900/20 rounded-lg">
-                          <h4 className="text-md font-semibold text-yellow-200">
+                          <h4 className="text-md font-semibold text-purple-200">
                             {sector.sector} Investment
                           </h4>
                           <div className="text-right">
@@ -794,7 +846,7 @@ function App() {
                               </div>
                               <div className="text-center p-2 bg-yellow-900/20 rounded">
                                 <div className="text-yellow-300 font-bold">{gold.volatility.toFixed(1)}%</div>
-                                <div className="text-yellow-200 text-xs">Volatility</div>
+                                <div className="text-purple-200 text-xs">Volatility</div>
                               </div>
                               <div className="text-center p-2 bg-purple-900/20 rounded">
                                 <div className="text-purple-300 font-bold">{gold.storage_required ? 'Yes' : 'No'}</div>
@@ -822,10 +874,10 @@ function App() {
                             </div>
                             
                             <div className="p-3 bg-yellow-900/10 rounded border-l-4 border-yellow-500">
-                              <p className="text-yellow-200 text-sm">
+                              <p className="text-purple-200 text-sm">
                                 <strong>Strategy:</strong> {gold.investment_strategy}
                               </p>
-                              <p className="text-yellow-200 text-sm mt-1">
+                              <p className="text-purple-200 text-sm mt-1">
                                 <strong>Tax Implications:</strong> {gold.tax_implications}
                               </p>
                             </div>

@@ -4,9 +4,34 @@ import os
 from sqlalchemy.orm import Session
 from app.db import get_db
 
+# Import the new database-based loader
+from app.utils.db_data_loader import (
+    load_stock_features as load_stock_features_from_db,
+    load_mutual_fund_features as load_mutual_fund_features_from_db,
+    load_gold_features as load_gold_features_from_db,
+    load_comprehensive_analysis as load_comprehensive_analysis_from_db
+)
+
 def load_stock_features():
     """
-    Load stock features from CSV file with real stock data
+    Load stock features from database (preferred) or fallback to CSV
+    """
+    try:
+        # Try database first
+        df = load_stock_features_from_db()
+        if not df.empty:
+            print(f"✅ Loaded {len(df)} stock records from database")
+            return df
+        else:
+            print("⚠️ No data in database, falling back to CSV...")
+            return load_stock_features_from_csv()
+    except Exception as e:
+        print(f"❌ Database loading failed: {e}, falling back to CSV...")
+        return load_stock_features_from_csv()
+
+def load_stock_features_from_csv():
+    """
+    FALLBACK: Load stock features from CSV file with real stock data
     """
     try:
         # Load the comprehensive sector analysis CSV
@@ -43,7 +68,7 @@ def load_stock_features():
         
         return pd.DataFrame(stock_data)
     except Exception as e:
-        print(f"Error loading stock features: {e}")
+        print(f"Error loading stock features from CSV: {e}")
         return pd.DataFrame()
 
 def load_mutual_fund_features():

@@ -119,8 +119,26 @@ class DailyScraper:
             self.results["gold"]["result"] = {"error": str(e)}
             self.log(f"Gold scraping failed: {e}")
 
+    async def regenerate_analysis_data(self):
+        """Regenerate analysis data and store directly in database tables"""
+        try:
+            self.log("Starting database-based analysis data regeneration...")
+            
+            # Import the new database analysis function
+            from app.analysis.db_sector_analysis import DatabaseSectorAnalyzer
+            
+            # Run the database-based analysis
+            analyzer = DatabaseSectorAnalyzer()
+            analyzer.run_full_analysis()
+            
+            self.log("✅ Database analysis regeneration completed successfully!")
+            
+        except Exception as e:
+            self.log(f"❌ Database analysis regeneration failed: {e}")
+
     async def regenerate_analysis_files(self):
-        """Regenerate analysis CSV files with fresh data for ML predictions"""
+        """DEPRECATED: Use regenerate_analysis_data() instead. 
+        Kept for backwards compatibility - generates CSV files"""
         try:
             self.log("Starting analysis CSV file regeneration...")
             
@@ -219,8 +237,11 @@ class DailyScraper:
         
         await asyncio.gather(*tasks, return_exceptions=True)
         
-        # After all data is scraped, regenerate analysis CSV files
-        await self.regenerate_analysis_files()
+        # After all data is scraped, regenerate analysis data in database
+        await self.regenerate_analysis_data()
+        
+        # Optional: Also generate CSV files for backup/compatibility
+        # await self.regenerate_analysis_files()
         
         end_time = datetime.datetime.now()
         duration = (end_time - start_time).total_seconds()
