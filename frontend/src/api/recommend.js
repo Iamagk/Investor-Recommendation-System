@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const BASE_URL = "http://localhost:8000"; // or your FastAPI deployed URL
+const BASE_URL = "http://localhost:8002"; // Updated to match the FastAPI server port
 
 export const getRecommendation = async (data) => {
   const response = await axios.post(`${BASE_URL}/recommend`, data);

@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test ML API</title>
+</head>
+<body>
+    <h1>Investment Recommender API Test</h1>
+    <button onclick="testMLAPI()">Test ML API</button>
+    <pre id="output"></pre>
+
+    <script>
+        async function testMLAPI() {
+            const output = document.getElementById('output');
+            output.textContent = 'Testing ML API...';
+            
+            try {
+                const response = await fetch('http://localhost:8002/ml/recommend/all/enhanced?top_n=3');
+                const data = await response.json();
+                
+                output.textContent = JSON.stringify(data, null, 2);
+                console.log('ML API Response:', data);
+                
+                // Test transformation
+                if (data.status === 'success') {
+                    const transformedData = {
+                        status: 'success',
+                        message: 'ML recommendations generated successfully',
+                        timestamp: new Date().toISOString(),
+                        recommendations: {
+                            stocks: [{
+                                sector: 'Test Sector',
+                                predicted_return: 0.05,
+                                investment_opportunities: 1,
+                                name: 'Test Sector',
+                                stocks: [{
+                                    symbol: 'TEST',
+                                    company_name: 'Test Company',
+                                    current_price: 100,
+                                    expected_return: 0.05,
+                                    recommendation: 'BUY'
+                                }]
+                            }],
+                            mutual_funds: [],
+                            gold: []
+                        }
+                    };
+                    
+                    console.log('Transformed data would be:', transformedData);
+                }
+                
+            } catch (error) {
+                output.textContent = 'Error: ' + error.message;
+                console.error('Error:', error);
+            }
+        }
+    </script>
+</body>
+</html>

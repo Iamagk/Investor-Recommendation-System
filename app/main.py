@@ -36,11 +36,28 @@ background_task_status = {
     "gold": {"status": "idle", "last_run": None, "result": None}
 }
 
+# Global data cache
+_stock_data_cache = None
+_cache_timestamp = None
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Manage application lifespan - startup and shutdown"""
+    global _stock_data_cache, _cache_timestamp
+    
     # Startup
     print("Starting Smart Investment Recommender API...")
+    print("Loading stock data into cache...")
+    
+    # Load data once at startup
+    try:
+        from app.utils.data_loader import load_stock_features
+        _stock_data_cache = load_stock_features()
+        _cache_timestamp = datetime.datetime.now()
+        print(f"✅ Cached {len(_stock_data_cache)} stock records at startup")
+    except Exception as e:
+        print(f"⚠️ Failed to cache data at startup: {e}")
+    
     print("Server started without automatic scraping")
     
     yield  # Application runs here
@@ -48,6 +65,44 @@ async def lifespan(app: FastAPI):
     # Shutdown
     print("Shutting down Smart Investment Recommender API...")
     print("Application shutdown complete")
+
+def get_cached_stock_data():
+    """Get cached stock data, refresh if needed"""
+    global _stock_data_cache, _cache_timestamp
+    
+    now = datetime.datetime.now()
+    
+    # Check if we need to refresh cache
+    should_refresh = False
+    
+    if _stock_data_cache is None or _cache_timestamp is None:
+        should_refresh = True
+        refresh_reason = "Cache is empty"
+    else:
+        time_diff = now - _cache_timestamp
+        
+        # Refresh if cache is older than 1 hour
+        if time_diff.total_seconds() > 3600:
+            should_refresh = True
+            refresh_reason = f"Cache is {time_diff.total_seconds()/60:.1f} minutes old"
+        
+        # Also refresh daily after 9:15 AM (15 minutes after scraper runs)
+        elif (now.hour >= 9 and now.minute >= 15 and 
+              _cache_timestamp.date() < now.date()):
+            should_refresh = True
+            refresh_reason = "Daily refresh after 9:15 AM"
+    
+    if should_refresh:
+        try:
+            from app.utils.data_loader import load_stock_features
+            _stock_data_cache = load_stock_features()
+            _cache_timestamp = now
+            print(f"🔄 Refreshed cache with {len(_stock_data_cache)} stock records ({refresh_reason})")
+        except Exception as e:
+            print(f"❌ Failed to refresh cache: {e}")
+            return None
+    
+    return _stock_data_cache
 
 app = FastAPI(
     title="Smart Sector Investment Recommender",

@@ -14,20 +14,20 @@ from app.utils.db_data_loader import (
 
 def load_stock_features():
     """
-    Load stock features from database (preferred) or fallback to CSV
+    Load stock features ONLY from database - no CSV fallback
     """
     try:
-        # Try database first
+        # Load directly from database
         df = load_stock_features_from_db()
         if not df.empty:
             print(f"✅ Loaded {len(df)} stock records from database")
             return df
         else:
-            print("⚠️ No data in database, falling back to CSV...")
-            return load_stock_features_from_csv()
+            print("❌ No stock data found in database tables")
+            return pd.DataFrame()
     except Exception as e:
-        print(f"❌ Database loading failed: {e}, falling back to CSV...")
-        return load_stock_features_from_csv()
+        print(f"❌ Database loading failed: {e}")
+        return pd.DataFrame()
 
 def load_stock_features_from_csv():
     """

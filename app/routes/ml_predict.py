@@ -116,22 +116,25 @@ def recommend_gold_enhanced_endpoint(top_n: int = 3, db: Session = Depends(get_d
 def recommend_all_enhanced_endpoint(top_n: int = 3, db: Session = Depends(get_db)):
     """Get enhanced recommendations for all asset types with conversational explanations"""
     try:
-        stocks = recommend_stocks_enhanced(db, top_n)
-        mutual_funds = recommend_mutual_funds_enhanced(db, top_n)
-        gold = recommend_gold_enhanced(db, top_n)
+        result = recommend_all_assets_enhanced(db, top_n, top_n, min(top_n, 2))
         
+        # Add compatibility fields for existing frontend
         return {
             "status": "success",
-            "date": "2025-08-02",
+            "date": "2025-08-05",
             "strategy": "ML-based Multi-Asset Recommendations with Conversational Explanations",
             "assets_covered": ["stocks", "mutual_funds", "gold"],
-            "stocks": stocks,
-            "mutual_funds": mutual_funds,
-            "gold": gold,
+            "stocks": result.get("stocks", {}),
+            "mutual_funds": result.get("mutual_funds", {}),
+            "gold": result.get("gold", {}),
+            "portfolio_summary": result.get("portfolio_summary", {}),
             "overall_summary": {
-                "total_recommendations": len(stocks['recommendations']) + len(mutual_funds['recommendations']) + len(gold['recommendations']),
+                "total_recommendations": result.get("portfolio_summary", {}).get("total_recommendations", 0),
                 "asset_class_diversification": 3,
-                "method": "Enhanced ML predictions with timing analysis and conversational explanations"
+                "method": "Enhanced ML predictions with timing analysis and conversational explanations",
+                "expected_return": result.get("portfolio_summary", {}).get("expected_return", 0),
+                "expected_volatility": result.get("portfolio_summary", {}).get("expected_volatility", 0),
+                "risk_level": result.get("portfolio_summary", {}).get("risk_level", "Moderate")
             }
         }
     except Exception as e:

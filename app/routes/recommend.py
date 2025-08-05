@@ -5,6 +5,7 @@ import datetime
 from app.db import get_db
 from app.recommender.recommender import recommend_assets, recommend_stocks, recommend_mutual_funds, recommend_gold, recommend_stocks_from_dataframe
 from app.utils.data_loader import load_stock_features
+from app.services.llm_analysis_service import llm_service
 
 router = APIRouter(tags=["Recommendations"])
 
@@ -13,19 +14,157 @@ def get_comprehensive_recommendations(
     db: Session = Depends(get_db),
     investment_amount: float = Query(default=100000, description="Investment amount in INR"),
     risk_tolerance: str = Query(default="moderate", description="Risk tolerance: low, moderate, high"),
-    investment_horizon: int = Query(default=12, description="Investment horizon in months")
+    investment_horizon: int = Query(default=12, description="Investment horizon in months"),
+    enable_ml: bool = Query(default=False, description="Enable ML predictions"),
+    asset_classes: str = Query(default="stocks,mutualFunds,gold", description="Comma-separated asset classes"),
+    strategy_type: str = Query(default="balanced", description="Investment strategy type"),
+    sectors: str = Query(default="", description="Preferred sectors"),
+    min_roi_expectation: float = Query(default=10, description="Minimum ROI expectation"),
+    exclude_volatile_assets: bool = Query(default=False, description="Exclude volatile assets"),
+    include_only_liquid_assets: bool = Query(default=False, description="Include only liquid assets"),
+    backtest_start: str = Query(default="", description="Backtest start date"),
+    backtest_end: str = Query(default="", description="Backtest end date")
 ):
     """
     Returns comprehensive investment recommendations with detailed analysis including:
-    - Sector-wise breakdown with predicted returns
-    - Specific stock/MF/gold recommendations with entry/exit strategies
+    - Sector-wise stock recommendations with timing analysis
+    - Mutual fund recommendations with SIP calculations
+    - Gold investment recommendations with storage and tax details
     - Timing analysis, volatility metrics, and investment strategies
     """
     try:
-        # Use our working individual recommendation functions - but extract individual items
-        stock_sectors = recommend_stocks(db, top_n=3)  # Get fewer sectors
+        # Use our working individual recommendation functions
+        stock_sectors = recommend_stocks(db, top_n=3)
         mf_recs = recommend_mutual_funds(db, top_n=6)
-        gold_recs = recommend_gold(db)  # No top_n parameter for gold
+        gold_recs = recommend_gold(db)
+        
+        # Extract individual stocks from sectors
+        stock_recs = []
+        for sector in stock_sectors:
+            for stock in sector.get('stocks', []):
+                stock_recs.append(stock)
+        
+        # Group stocks by sector for the response format
+        sectors = {}
+        for stock in stock_recs:
+            sector = stock.get('sector', 'General')
+            if sector not in sectors:
+                sectors[sector] = {
+                    'sector': sector,
+                    'predicted_return': stock.get('predicted_return', 0),
+                    'investment_opportunities': 0,
+                    'stocks': []
+                }
+            
+            enhanced_stock = {
+                "symbol": stock.get('symbol', 'N/A'),
+                "company_name": stock.get('company_name', stock.get('name', 'Unknown Company')),
+                "current_performance": stock.get('current_performance', stock.get('predicted_return', 0) * 100),
+                "investment_strategy": stock.get('investment_strategy', 'Long-term growth strategy'),
+                "entry_date": stock.get('entry_date', '2025-08-05'),
+                "entry_price": stock.get('entry_price', stock.get('current_price', 100)),
+                "exit_date": stock.get('exit_date', '2026-08-05'),
+                "exit_price": stock.get('exit_price', stock.get('target_price', 110)),
+                "expected_return": stock.get('expected_return', stock.get('predicted_return', 0.1)),
+                "stop_loss": stock.get('stop_loss', stock.get('entry_price', 100) * 0.95),
+                "target_price": stock.get('target_price', stock.get('entry_price', 100) * 1.15),
+                "holding_period": stock.get('holding_period', 365),
+                "volatility": stock.get('volatility', 15.0),
+                "current_price": stock.get("current_price", 100)
+            }
+            
+            # Generate LLM analysis for the stock
+            try:
+                llm_analysis = llm_service.generate_stock_analysis(enhanced_stock)
+                enhanced_stock.update(llm_analysis)
+            except Exception as e:
+                print(f"LLM analysis failed for {enhanced_stock['symbol']}: {e}")
+            
+            sectors[sector]["stocks"].append(enhanced_stock)
+            sectors[sector]["investment_opportunities"] += 1
+            sectors[sector]["predicted_return"] = max(sectors[sector]["predicted_return"], 
+                                                    enhanced_stock.get("expected_return", 0))
+        
+        stock_recommendations = list(sectors.values())
+        
+        # Process mutual funds with enhanced data
+        mf_sectors = {}
+        for mf in mf_recs:
+            category = mf.get('category', mf.get('fund_type', 'Diversified'))
+            if category not in mf_sectors:
+                mf_sectors[category] = {
+                    'sector': category,
+                    'predicted_return': mf.get('predicted_return', 0),
+                    'investment_opportunities': 0,
+                    'mutual_funds': []
+                }
+            
+            enhanced_mf = {
+                "fund_name": mf.get('fund_name', mf.get('name', 'Unknown Fund')),
+                "fund_manager": mf.get('fund_manager', 'Unknown'),
+                "current_performance": mf.get('current_performance', mf.get('predicted_return', 0) * 100),
+                "investment_strategy": mf.get('investment_strategy', 'Diversified growth strategy'),
+                "expected_return": mf.get('expected_return', mf.get('predicted_return', 0.12)),
+                "is_sip_recommended": mf.get('is_sip_recommended', True),
+                "sip_amount": mf.get('sip_amount', investment_amount / 12 if investment_amount else 5000),
+                "sip_duration_months": investment_horizon,
+                "lump_sum_amount": mf.get('lump_sum_amount', investment_amount or 100000),
+                "expense_ratio": mf.get('expense_ratio', 1.5),
+                "risk_level": mf.get('risk_level', 'Medium'),
+                "minimum_investment": mf.get('minimum_investment', 500),
+                "nav": mf.get("nav", mf.get("current_nav", 100.0))
+            }
+            
+            # Generate LLM analysis for the mutual fund
+            try:
+                llm_analysis = llm_service.generate_mutual_fund_analysis(enhanced_mf)
+                enhanced_mf.update(llm_analysis)
+            except Exception as e:
+                print(f"LLM analysis failed for {enhanced_mf['fund_name']}: {e}")
+            
+            mf_sectors[category]["mutual_funds"].append(enhanced_mf)
+            mf_sectors[category]["investment_opportunities"] += 1
+            mf_sectors[category]["predicted_return"] = max(mf_sectors[category]["predicted_return"], 
+                                                         enhanced_mf.get("expected_return", 0))
+        
+        mf_recommendations = list(mf_sectors.values())
+        
+        # Process gold recommendations
+        gold_recommendations = []
+        for gold in gold_recs:
+            gold_sector = {
+                'sector': 'Precious Metals',
+                'predicted_return': gold.get('predicted_return', 0.08),
+                'investment_opportunities': 1,
+                'gold': [{
+                    "investment_type": gold.get('investment_type', 'Gold Investment'),
+                    "current_performance": gold.get('current_performance', 8.0),
+                    "investment_strategy": gold.get('investment_strategy', 'Long-term wealth preservation'),
+                    "entry_date": "2025-08-05",
+                    "entry_price": gold.get('entry_price', gold.get('current_price', 5500)),
+                    "exit_date": "2026-08-05",
+                    "exit_price": gold.get('exit_price', gold.get('entry_price', 5500) * 1.08),
+                    "expected_return": gold.get('expected_return', 0.08),
+                    "holding_period": 365,
+                    "volatility": gold.get('volatility', 12.0),
+                    "liquidity_rating": gold.get('liquidity_rating', 'High'),
+                    "storage_required": gold.get('storage_required', False),
+                    "tax_implications": gold.get('tax_implications', 'LTCG applies after 3 years'),
+                    "current_price": gold.get('current_price', 5500)
+                }]
+            }
+            gold_recommendations.append(gold_sector)
+        
+        return {
+            "status": "success",
+            "message": "Comprehensive recommendations generated successfully",
+            "timestamp": datetime.datetime.now().isoformat(),
+            "recommendations": {
+                "stocks": stock_recommendations,
+                "mutual_funds": mf_recommendations,
+                "gold": gold_recommendations
+            }
+        }
         
         # Extract individual stocks from sectors
         stock_recs = []
@@ -82,6 +221,13 @@ def get_comprehensive_recommendations(
                     "current_price": stock.get("current_price", 100)
                 }
                 
+                # Generate LLM analysis for the stock
+                try:
+                    llm_analysis = llm_service.generate_stock_analysis(enhanced_stock)
+                    enhanced_stock.update(llm_analysis)
+                except Exception as e:
+                    print(f"LLM analysis failed for {enhanced_stock['symbol']}: {e}")
+                
                 sectors[sector]["stocks"].append(enhanced_stock)
                 sectors[sector]["investment_opportunities"] += 1
                 sectors[sector]["predicted_return"] = max(sectors[sector]["predicted_return"], 
@@ -121,6 +267,13 @@ def get_comprehensive_recommendations(
                     "minimum_investment": 500 if is_sip_recommended else 5000,
                     "nav": mf.get("nav", mf.get("current_nav", 100.0))
                 }
+                
+                # Generate LLM analysis for the mutual fund
+                try:
+                    llm_analysis = llm_service.generate_mutual_fund_analysis(enhanced_mf)
+                    enhanced_mf.update(llm_analysis)
+                except Exception as e:
+                    print(f"LLM analysis failed for {enhanced_mf['fund_name']}: {e}")
                 
                 mf_sectors[sector]["mutual_funds"].append(enhanced_mf)
                 mf_sectors[sector]["investment_opportunities"] += 1
@@ -226,10 +379,15 @@ def get_stock_recommendations_dataframe(use_realtime: bool = Query(False)):
     and uses the original recommend_stocks function format.
     """
     try:
-        # Load stock features from database
-        df = load_stock_features()
+        # Use cached data instead of loading fresh every time
+        try:
+            from app.main import get_cached_stock_data
+            df = get_cached_stock_data()
+        except ImportError:
+            # Fallback to direct loading if cache not available
+            df = load_stock_features()
         
-        if df.empty:
+        if df is None or df.empty:
             return {
                 "status": "warning",
                 "message": "No stock data available in database",

@@ -407,7 +407,7 @@ def recommend_stocks_enhanced(db: Session, top_n: int = 5) -> Dict[str, Any]:
                     timing_info = get_stock_timing_analysis(symbols[0].strip())
             
             explanation = f"The {sector.sector} sector shows {momentum_desc.lower()} momentum with {risk_level.lower()} volatility. "
-            explanation += f"Based on our ML analysis, we predict a {pred_return:.1f}% return. "
+            explanation += f"Based on our ML analysis, we predict a {pred_return:.2f}% return. "
             explanation += f"This sector has {sector.investment_count or 0} active investments with an average price of ₹{sector.avg_price or 0:.2f}. "
             
             if timing_info:
@@ -438,8 +438,8 @@ def recommend_stocks_enhanced(db: Session, top_n: int = 5) -> Dict[str, Any]:
         avg_return = sum(s["predicted_return"] for s in ranked[:top_n]) / len(ranked[:top_n]) if ranked else 0
         avg_volatility = sum(s["volatility"] for s in ranked[:top_n]) / len(ranked[:top_n]) if ranked else 0
         
-        market_summary = f"The top {top_n} recommended sectors show an average predicted return of {avg_return:.1f}% "
-        market_summary += f"with moderate volatility of {avg_volatility:.1f}%. "
+        market_summary = f"The top {top_n} recommended sectors show an average predicted return of {avg_return:.2f}% "
+        market_summary += f"with moderate volatility of {avg_volatility:.2f}%. "
         market_summary += f"Current market conditions favor {'growth' if avg_return > 8 else 'stable'} sectors."
         
         return {
@@ -570,71 +570,56 @@ def recommend_mutual_funds(db: Session, top_n: int = 5) -> List[Dict[str, Any]]:
 def recommend_mutual_funds_enhanced(db: Session, top_n: int = 5) -> Dict[str, Any]:
     """Enhanced mutual fund recommendations with conversational explanations"""
     try:
-        funds = db.query(ComprehensiveSectorAnalysis).all()
-        scored_funds = []
-        features = []
-        fund_map = {}
-
-        for idx, fund in enumerate(funds):
-            features.append({
-                "avg_return_pct": fund.avg_return_percent or 0,
-                "volatility": fund.avg_volatility_percent or 0,
-                "momentum_score": fund.avg_score or 0,
-                "investment_count": fund.investments_analyzed or 0,
-                "avg_price": 100  # Default NAV-like value
-            })
-            fund_map[idx] = fund
-
-        predicted_returns = predict_returns(features)
-
-        for idx, pred_return in enumerate(predicted_returns):
-            fund = fund_map[idx]
-            score = compute_score(pred_return, fund.avg_volatility_percent or 0, fund.avg_score or 0)
-            
-            # Generate conversational explanations
-            risk_level = "Low" if (fund.avg_volatility_percent or 0) < 5 else "Medium" if (fund.avg_volatility_percent or 0) < 10 else "High"
-            performance_desc = "Excellent" if (fund.avg_score or 0) > 8 else "Good" if (fund.avg_score or 0) > 6 else "Average"
-            
-            explanation = f"This {fund.asset_type or 'mutual fund'} in the {fund.sector} sector shows {performance_desc.lower()} performance. "
-            explanation += f"With {risk_level.lower()} volatility of {fund.avg_volatility_percent or 0:.1f}%, it's suitable for "
-            explanation += f"{'conservative' if risk_level == 'Low' else 'moderate' if risk_level == 'Medium' else 'aggressive'} investors. "
-            explanation += f"Our ML model predicts a {pred_return:.1f}% return based on analysis of {fund.investments_analyzed or 0} similar investments."
-            
-            if fund.top_performer:
-                explanation += f" The top performer in this category is {fund.top_performer}."
-            
-            fund_data = {
-                "sector": fund.sector,
-                "asset_type": fund.asset_type,
-                "predicted_return": round(pred_return, 2),
-                "score": round(score, 2),
-                "avg_return_percent": fund.avg_return_percent or 0,
-                "avg_volatility_percent": fund.avg_volatility_percent or 0,
-                "avg_score": fund.avg_score or 0,
-                "investments_analyzed": fund.investments_analyzed or 0,
-                "top_performer": fund.top_performer or "",
-                "risk_level": risk_level,
-                "performance_description": performance_desc,
-                "explanation": explanation
+        # Use the original mutual fund recommendation logic but with enhanced output
+        basic_recommendations = recommend_mutual_funds(db, top_n)
+        
+        if not basic_recommendations:
+            return {
+                "recommendations": [],
+                "portfolio_summary": "No mutual fund data available for analysis.",
+                "total_analyzed": 0,
+                "timestamp": datetime.now().isoformat(),
+                "methodology": "ML-enhanced fund analysis with risk profiling"
             }
+        
+        # Enhance the basic recommendations with ML predictions and explanations
+        enhanced_recommendations = []
+        
+        for fund in basic_recommendations:
+            # Generate enhanced explanations
+            risk_level = fund.get("risk_level", "Medium")
+            predicted_return = fund.get("predicted_return", 0)
+            category = fund.get("category", "Diversified")
+            nav = fund.get("nav", 100)
             
-            scored_funds.append(fund_data)
-
-        # Sort by score and return top N
-        ranked = sorted(scored_funds, key=lambda x: x["score"], reverse=True)
+            explanation = f"This {category} fund shows {'excellent' if predicted_return > 10 else 'good' if predicted_return > 7 else 'average'} performance potential. "
+            explanation += f"With {risk_level.lower()} risk profile, it's suitable for "
+            explanation += f"{'conservative' if risk_level == 'Low' else 'moderate' if risk_level == 'Medium' else 'aggressive'} investors. "
+            explanation += f"Our analysis predicts a {predicted_return:.2f}% return. "
+            explanation += f"At ₹{nav:.2f} NAV, this fund offers {'excellent' if nav < 100 else 'good' if nav < 500 else 'moderate'} accessibility for retail investors."
+            
+            # Add enhanced fields
+            enhanced_fund = fund.copy()
+            enhanced_fund.update({
+                "explanation": explanation,
+                "performance_description": "Excellent" if predicted_return > 10 else "Good" if predicted_return > 7 else "Average",
+                "accessibility": "High" if nav < 100 else "Medium" if nav < 500 else "Low"
+            })
+            
+            enhanced_recommendations.append(enhanced_fund)
         
-        # Generate overall portfolio summary
-        avg_return = sum(f["predicted_return"] for f in ranked[:top_n]) / len(ranked[:top_n]) if ranked else 0
-        avg_volatility = sum(f["avg_volatility_percent"] for f in ranked[:top_n]) / len(ranked[:top_n]) if ranked else 0
+        # Generate portfolio summary
+        avg_return = sum(f["predicted_return"] for f in enhanced_recommendations) / len(enhanced_recommendations) if enhanced_recommendations else 0
+        avg_nav = sum(f["nav"] for f in enhanced_recommendations) / len(enhanced_recommendations) if enhanced_recommendations else 0
         
-        portfolio_summary = f"The recommended mutual fund portfolio shows an average predicted return of {avg_return:.1f}% "
-        portfolio_summary += f"with {avg_volatility:.1f}% volatility. This mix provides "
-        portfolio_summary += f"{'balanced growth with moderate risk' if 5 <= avg_volatility <= 10 else 'stable returns with low risk' if avg_volatility < 5 else 'high growth potential with higher risk'}."
+        portfolio_summary = f"The recommended mutual fund portfolio shows an average predicted return of {avg_return:.2f}% "
+        portfolio_summary += f"with average NAV of ₹{avg_nav:.2f}. This diversified mix provides "
+        portfolio_summary += f"{'excellent growth potential' if avg_return > 9 else 'balanced growth with moderate risk' if avg_return > 7 else 'stable returns with low risk'}."
         
         return {
-            "recommendations": ranked[:top_n],
+            "recommendations": enhanced_recommendations,
             "portfolio_summary": portfolio_summary,
-            "total_analyzed": len(funds),
+            "total_analyzed": len(enhanced_recommendations),
             "timestamp": datetime.now().isoformat(),
             "methodology": "ML-enhanced fund analysis with risk profiling"
         }
@@ -729,76 +714,61 @@ def recommend_gold(db: Session, top_n: int = 5) -> List[Dict[str, Any]]:
 def recommend_gold_enhanced(db: Session, top_n: int = 5) -> Dict[str, Any]:
     """Enhanced gold recommendations with conversational explanations"""
     try:
-        gold_investments = db.query(EnhancedSectorScores).filter(
-            EnhancedSectorScores.asset_type.ilike('%gold%')
-        ).all()
+        # Use the original gold recommendation logic but with enhanced output
+        basic_recommendations = recommend_gold(db, top_n)
         
-        scored_gold = []
-        features = []
-        gold_map = {}
-
-        for idx, gold in enumerate(gold_investments):
-            features.append({
-                "avg_return_pct": gold.avg_return_percent or 0,
-                "volatility": gold.avg_volatility_percent or 0,
-                "momentum_score": gold.avg_score or 0,
-                "investment_count": gold.investments_analyzed or 0,
-                "avg_price": 5000  # Default gold price per 10g
-            })
-            gold_map[idx] = gold
-
-        predicted_returns = predict_returns(features)
-
-        for idx, pred_return in enumerate(predicted_returns):
-            gold = gold_map[idx]
-            score = compute_score(pred_return, gold.avg_volatility_percent or 0, gold.avg_score or 0)
+        if not basic_recommendations:
+            return {
+                "recommendations": [],
+                "market_summary": "No gold investment data available for analysis.",
+                "total_analyzed": 0,
+                "timestamp": datetime.now().isoformat(),
+                "methodology": "ML-enhanced gold analysis with macroeconomic factors"
+            }
+        
+        # Enhance the basic recommendations with ML predictions and explanations
+        enhanced_recommendations = []
+        
+        for gold in basic_recommendations:
+            # Generate enhanced explanations
+            predicted_return = gold.get("predicted_return", 0)
+            risk_level = gold.get("risk_level", "Low")
+            investment_type = gold.get("investment_type", "Gold Investment")
+            avg_price = gold.get("avg_price", 5500)
             
-            # Generate conversational explanations
-            volatility_desc = "stable" if (gold.avg_volatility_percent or 0) < 5 else "moderate" if (gold.avg_volatility_percent or 0) < 10 else "volatile"
-            score_desc = "excellent" if (gold.avg_score or 0) > 8 else "good" if (gold.avg_score or 0) > 6 else "average"
+            volatility_desc = "stable" if predicted_return < 4 else "moderate" if predicted_return < 7 else "dynamic"
+            score_desc = "excellent" if predicted_return > 6 else "good" if predicted_return > 4 else "average"
             
-            explanation = f"Gold investments in the {gold.sector} category show {score_desc} performance with {volatility_desc} price movements. "
-            explanation += f"Based on analysis of {gold.investments_analyzed or 0} similar gold investments, "
-            explanation += f"our ML model predicts a {pred_return:.1f}% return. "
-            explanation += f"Gold serves as a hedge against inflation and currency fluctuations, making it "
-            explanation += f"{'highly recommended' if score > 7 else 'suitable' if score > 5 else 'optional'} for portfolio diversification."
+            explanation = f"{investment_type} shows {score_desc} performance with {volatility_desc} price movements. "
+            explanation += f"Our analysis predicts a {predicted_return:.2f}% return. "
+            explanation += f"At ₹{avg_price:.0f} per 10g, gold serves as an effective hedge against inflation and currency fluctuations. "
+            explanation += f"This makes it {'highly recommended' if predicted_return > 6 else 'suitable' if predicted_return > 4 else 'optional'} for portfolio diversification, "
+            explanation += f"especially for {'conservative' if risk_level == 'Low' else 'moderate' if risk_level == 'Medium' else 'aggressive'} investors seeking wealth preservation."
             
-            if gold.top_performer:
-                explanation += f" Consider {gold.top_performer} as a top option in this category."
-            
-            gold_data = {
-                "sector": gold.sector,
-                "asset_type": gold.asset_type,
-                "predicted_return": round(pred_return, 2),
-                "score": round(score, 2),
-                "avg_return_percent": gold.avg_return_percent or 0,
-                "avg_volatility_percent": gold.avg_volatility_percent or 0,
-                "avg_score": gold.avg_score or 0,
-                "investments_analyzed": gold.investments_analyzed or 0,
-                "top_performer": gold.top_performer or "",
+            # Add enhanced fields
+            enhanced_gold = gold.copy()
+            enhanced_gold.update({
+                "explanation": explanation,
                 "volatility_description": volatility_desc,
                 "score_description": score_desc,
-                "explanation": explanation
-            }
+                "investment_rationale": f"Portfolio diversification and inflation hedge at ₹{avg_price:.0f} per 10g"
+            })
             
-            scored_gold.append(gold_data)
-
-        # Sort by score and return top N
-        ranked = sorted(scored_gold, key=lambda x: x["score"], reverse=True)
+            enhanced_recommendations.append(enhanced_gold)
         
-        # Generate gold market summary
-        avg_return = sum(g["predicted_return"] for g in ranked[:top_n]) / len(ranked[:top_n]) if ranked else 0
-        avg_volatility = sum(g["avg_volatility_percent"] for g in ranked[:top_n]) / len(ranked[:top_n]) if ranked else 0
+        # Generate market summary
+        avg_return = sum(g["predicted_return"] for g in enhanced_recommendations) / len(enhanced_recommendations) if enhanced_recommendations else 0
+        avg_price = sum(g["avg_price"] for g in enhanced_recommendations) / len(enhanced_recommendations) if enhanced_recommendations else 5500
         
-        market_summary = f"Gold investments show an average predicted return of {avg_return:.1f}% with {avg_volatility:.1f}% volatility. "
+        market_summary = f"Gold investments show an average predicted return of {avg_return:.2f}% at ₹{avg_price:.0f} per 10g. "
         market_summary += f"Given current economic conditions, gold serves as "
         market_summary += f"{'an excellent hedge' if avg_return > 6 else 'a stable store of value' if avg_return > 3 else 'a conservative option'} "
-        market_summary += f"for portfolio protection and diversification."
+        market_summary += f"for portfolio protection and diversification against market volatility."
         
         return {
-            "recommendations": ranked[:top_n],
+            "recommendations": enhanced_recommendations,
             "market_summary": market_summary,
-            "total_analyzed": len(gold_investments),
+            "total_analyzed": len(enhanced_recommendations),
             "timestamp": datetime.now().isoformat(),
             "methodology": "ML-enhanced gold analysis with macroeconomic factors"
         }
@@ -826,11 +796,13 @@ def recommend_all_assets_enhanced(db: Session, stocks_n: int = 3, mf_n: int = 3,
         
         if mutual_funds.get("recommendations"):
             all_returns.extend([mf["predicted_return"] for mf in mutual_funds["recommendations"]])
-            all_volatilities.extend([mf["avg_volatility_percent"] for mf in mutual_funds["recommendations"]])
+            # Mutual funds don't have avg_volatility_percent, use a default low volatility for MFs
+            all_volatilities.extend([2.0 for mf in mutual_funds["recommendations"]])  # MFs typically have lower volatility
         
         if gold.get("recommendations"):
             all_returns.extend([g["predicted_return"] for g in gold["recommendations"]])
-            all_volatilities.extend([g["avg_volatility_percent"] for g in gold["recommendations"]])
+            # Gold doesn't have avg_volatility_percent, use a default moderate volatility for gold
+            all_volatilities.extend([3.0 for g in gold["recommendations"]])  # Gold typically has moderate volatility
         
         portfolio_return = sum(all_returns) / len(all_returns) if all_returns else 0
         portfolio_volatility = sum(all_volatilities) / len(all_volatilities) if all_volatilities else 0
@@ -839,8 +811,8 @@ def recommend_all_assets_enhanced(db: Session, stocks_n: int = 3, mf_n: int = 3,
         total_recommendations = len(all_returns)
         risk_level = "Conservative" if portfolio_volatility < 5 else "Moderate" if portfolio_volatility < 10 else "Aggressive"
         
-        portfolio_advice = f"Your diversified portfolio of {total_recommendations} recommendations shows a predicted return of {portfolio_return:.1f}% "
-        portfolio_advice += f"with {portfolio_volatility:.1f}% volatility, indicating a {risk_level.lower()} risk profile. "
+        portfolio_advice = f"Your diversified portfolio of {total_recommendations} recommendations shows a predicted return of {portfolio_return:.2f}% "
+        portfolio_advice += f"with {portfolio_volatility:.2f}% volatility, indicating a {risk_level.lower()} risk profile. "
         
         if portfolio_return > 8:
             portfolio_advice += "This is an excellent growth-oriented portfolio suitable for long-term wealth building. "

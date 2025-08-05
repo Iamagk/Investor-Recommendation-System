@@ -545,17 +545,22 @@ def full_recommendation_with_budget(db: Session, budget: float, top_n: int = 5, 
 
 def recommend_stocks(db: Session, top_n: int = 5, use_realtime: bool = False, weights: dict = None):
     """
-    Enhanced ML-powered stock recommendation using real stock data from CSV
+    Enhanced ML-powered stock recommendation using cached stock data
     """
     import random
-    from app.utils.data_loader import load_stock_features
     
     try:
-        # Load real stock data from CSV
-        stock_df = load_stock_features()
+        # Use cached data instead of loading fresh every time
+        try:
+            from app.main import get_cached_stock_data
+            stock_df = get_cached_stock_data()
+        except ImportError:
+            # Fallback to direct loading if cache not available
+            from app.utils.data_loader import load_stock_features
+            stock_df = load_stock_features()
         
-        if stock_df.empty:
-            print("No stock data available from CSV, falling back to database")
+        if stock_df is None or stock_df.empty:
+            print("No stock data available, falling back to database")
             return recommend_stocks_fallback(db, top_n, weights)
         
         # Use dynamic weights or default

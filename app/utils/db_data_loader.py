@@ -21,47 +21,105 @@ class DatabaseDataLoader:
         pass
     
     def load_stock_features_from_db(self) -> pd.DataFrame:
-        """Load stock features directly from database"""
+        """Load stock features directly from stocks table (primary) and sector analysis (supplementary)"""
         try:
             with next(get_db()) as db:
-                # Query stock sector analysis table
-                records = db.query(StockSectorAnalysis).all()
-                
-                if not records:
-                    print("No stock sector analysis data found in database")
+                # First try to load from the main stocks table
+                conn = get_postgres_connection()
+                if not conn:
+                    print("No database connection available")
                     return pd.DataFrame()
                 
-                # Convert to DataFrame and expand top performers
-                stock_data = []
-                for record in records:
-                    if record.investment_types == 'Stocks' and record.top_performers:
-                        try:
-                            # Parse the top_performers JSON string
-                            performers = json.loads(record.top_performers)
-                            for stock in performers:
-                                stock_data.append({
-                                    'symbol': stock['symbol'],
-                                    'name': stock['name'],
-                                    'sector': record.sector,
-                                    'current_price': record.avg_price,
-                                    'change_percent': stock['change_percent'],
-                                    'predicted_return': stock['change_percent'] / 100,
-                                    'volatility': record.volatility,
-                                    'momentum_score': record.momentum_score,
-                                    'avg_return_pct': record.avg_return_pct
-                                })
-                        except (json.JSONDecodeError, KeyError) as e:
-                            print(f"Error parsing top performers for sector {record.sector}: {e}")
-                            continue
+                # Load stock data with sector information
+                stock_query = """
+                    SELECT 
+                        s.symbol,
+                        s.name,
+                        s.last_price as current_price,
+                        s.change_percent,
+                        s.market_cap,
+                        s.sector,
+                        s.last_updated,
+                        (s.change_percent / 100.0) as predicted_return
+                    FROM stocks s
+                    WHERE s.last_updated >= CURRENT_DATE - INTERVAL '7 days'
+                    ORDER BY s.change_percent DESC
+                """
                 
-                return pd.DataFrame(stock_data)
+                stock_df = pd.read_sql(stock_query, conn)
+                
+                if stock_df.empty:
+                    print("No recent stock data found, trying sector analysis...")
+                    # Fallback to sector analysis data expansion
+                    records = db.query(StockSectorAnalysis).all()
+                    
+                    if not records:
+                        print("No stock sector analysis data found in database")
+                        conn.close()
+                        return pd.DataFrame()
+                    
+                    # Convert sector analysis to individual stock records
+                    stock_data = []
+                    for record in records:
+                        if record.investment_types == 'Stocks' and record.top_performers:
+                            try:
+                                performers = json.loads(record.top_performers)
+                                for stock in performers:
+                                    stock_data.append({
+                                        'symbol': stock['symbol'],
+                                        'name': stock['name'],
+                                        'sector': record.sector,
+                                        'current_price': record.avg_price,
+                                        'change_percent': stock['change_percent'],
+                                        'predicted_return': stock['change_percent'] / 100,
+                                        'volatility': record.volatility,
+                                        'momentum_score': record.momentum_score,
+                                        'avg_return_pct': record.avg_return_pct
+                                    })
+                            except (json.JSONDecodeError, KeyError) as e:
+                                print(f"Error parsing top performers for sector {record.sector}: {e}")
+                                continue
+                    
+                    stock_df = pd.DataFrame(stock_data)
+                else:
+                    # Add supplementary data from sector analysis
+                    try:
+                        sector_query = """
+                            SELECT sector, volatility, momentum_score, avg_return_pct
+                            FROM stock_sector_analysis
+                            WHERE investment_types = 'Stocks'
+                        """
+                        sector_df = pd.read_sql(sector_query, conn)
+                        
+                        # Merge with sector data for additional metrics
+                        stock_df = stock_df.merge(
+                            sector_df, 
+                            on='sector', 
+                            how='left'
+                        )
+                        
+                        # Fill missing volatility with default values
+                        stock_df['volatility'] = stock_df['volatility'].fillna(15.0)
+                        stock_df['momentum_score'] = stock_df['momentum_score'].fillna(0.0)
+                        stock_df['avg_return_pct'] = stock_df['avg_return_pct'].fillna(stock_df['change_percent'])
+                        
+                    except Exception as e:
+                        print(f"Warning: Could not load sector supplementary data: {e}")
+                        # Add default values for missing columns
+                        stock_df['volatility'] = 15.0
+                        stock_df['momentum_score'] = 0.0
+                        stock_df['avg_return_pct'] = stock_df['change_percent']
+                
+                conn.close()
+                print(f"✅ Loaded {len(stock_df)} stocks from database (stocks table)")
+                return stock_df
                 
         except Exception as e:
             print(f"Error loading stock features from database: {e}")
             return pd.DataFrame()
     
     def load_mutual_fund_features_from_db(self) -> pd.DataFrame:
-        """Load mutual fund features directly from database"""
+        """Load mutual fund features directly from mutual_funds table"""
         try:
             conn = get_postgres_connection()
             if not conn:
@@ -70,15 +128,18 @@ class DatabaseDataLoader:
             query = """
                 SELECT 
                     fund_name as name,
+                    fund_house as fund_manager,
                     category as fund_type,
                     nav as current_nav,
                     returns_1y as return_1year,
                     returns_3y as return_3year,
                     risk_level,
-                    'Debt' as category
+                    last_updated,
+                    category
                 FROM mutual_funds
                 WHERE last_updated >= CURRENT_DATE - INTERVAL '30 days'
-                LIMIT 100
+                ORDER BY returns_1y DESC NULLS LAST
+                LIMIT 500
             """
             
             df = pd.read_sql(query, conn)
@@ -86,10 +147,21 @@ class DatabaseDataLoader:
             
             # Add calculated fields
             if not df.empty:
-                df['predicted_return'] = df['return_1year'].fillna(0) / 100
+                df['predicted_return'] = df['return_1year'].fillna(12.0)  # Default 12% if missing
+                df['expected_return'] = df['predicted_return']
+                df['current_performance'] = df['return_1year'].fillna(0)
+                
+                # Map risk levels to numeric scores
                 df['risk_score'] = df['risk_level'].map({
-                    'Low': 1, 'Moderate': 2, 'High': 3
+                    'Low': 1, 'Medium': 2, 'Moderate': 2, 'High': 3
                 }).fillna(2)
+                
+                # Add investment recommendations
+                df['is_sip_recommended'] = True  # Most mutual funds are SIP suitable
+                df['minimum_investment'] = 500   # Standard minimum
+                df['expense_ratio'] = 1.5        # Default expense ratio
+                
+                print(f"✅ Loaded {len(df)} mutual funds from database")
             
             return df
             
