@@ -195,9 +195,14 @@ function App() {
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="text-center mb-8">
-                  <h1 className="text-4xl font-bold text-purple-200 mb-8 text-center">
-          Investment Recommender
-        </h1>
+          <h1 className="text-4xl font-bold text-purple-200 mb-8 text-center flex items-center justify-center">
+            <img 
+              src="/profile.jpg" 
+              alt="Profile" 
+              className="w-12 h-12 mr-4 rounded-full border-2 border-purple-400 shadow-lg object-cover"
+            />
+            Investment Recommender
+          </h1>
           <p className="text-purple-200 text-lg">AI-powered investment recommendations tailored for you</p>
         </div>
 
