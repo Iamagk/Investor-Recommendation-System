@@ -2,11 +2,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import Dict, List, Optional
 import datetime
+import logging
 from app.db import get_db
 from app.recommender.recommender import recommend_assets, recommend_stocks, recommend_mutual_funds, recommend_gold, recommend_stocks_from_dataframe
 from app.utils.data_loader import load_stock_features
 from app.services.llm_analysis_service import llm_service
 
+logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Recommendations"])
 
 @router.get("/comprehensive", summary="Get comprehensive investment recommendations with detailed analysis")
@@ -336,8 +338,60 @@ def get_recommendations(
     Parameters:
     - top_n: Number of recommendations per asset type
     - use_ml: Enable ML-powered predictions for stocks (default: True)
-    - use_realtime: Fetch real-time prices (default: False, slower but current)
+    - use_realtime: Fetch real-time prices and use CFA-style Yahoo Finance analysis (default: False, slower but current)
     """
+    if use_realtime:
+        # Use the new CFA real-time system
+        try:
+            from app.routes.cfa_recommendations import get_cfa_recommendations
+            cfa_response = get_cfa_recommendations(top_n=top_n)
+            
+            # Convert to legacy format for compatibility
+            stocks = []
+            if 'recommendations' in cfa_response:
+                for rec in cfa_response['recommendations'][:top_n]:
+                    stocks.append({
+                        "symbol": rec['symbol'],
+                        "company_name": rec['company_name'],
+                        "current_price": rec['current_price'],
+                        "target_price": rec['target_price'],
+                        "expected_return": rec.get('expected_return_percent', 0),
+                        "investment_score": 85 if rec['investment_recommendation'] == 'STRONG_BUY' else 
+                                          75 if rec['investment_recommendation'] == 'BUY' else 
+                                          60 if rec['investment_recommendation'] == 'HOLD' else 
+                                          40 if rec['investment_recommendation'] == 'SELL' else 25,
+                        "recommendation": rec['investment_recommendation'],
+                        "risk_level": rec['risk_rating'],
+                        "sector": rec['sector'],
+                        "pe_ratio": rec.get('pe_ratio'),
+                        "pb_ratio": rec.get('pb_ratio'),
+                        "dividend_yield": rec.get('dividend_yield'),
+                        "last_updated": rec['last_updated'],
+                        "cfa_analysis": {
+                            "intrinsic_value": rec['intrinsic_value'],
+                            "margin_of_safety": rec['margin_of_safety'],
+                            "entry_strategy": rec['entry_strategy'],
+                            "volume_to_buy": rec['volume_to_buy'],
+                            "stop_loss": rec['stop_loss']
+                        }
+                    })
+            
+            return {
+                "status": "success",
+                "message": f"CFA-style real-time recommendations using Yahoo Finance data",
+                "data_source": "Yahoo Finance + ML Models (CFA Analysis)",
+                "stocks": stocks,
+                "realtime_enabled": True,
+                "cfa_enhanced": True,
+                "timestamp": datetime.datetime.now().isoformat()
+            }
+            
+        except Exception as e:
+            logger.error(f"CFA real-time system failed: {e}")
+            # Fallback to traditional system
+            pass
+    
+    # Traditional database-based recommendations
     result = recommend_assets(db, top_n=top_n, use_ml=use_ml, use_realtime=use_realtime)
     return result
 

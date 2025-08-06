@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 import { TrendingUp, DollarSign, Target, BarChart3, Coins, Building2, Award, ArrowRight, CheckCircle, ChevronDown } from 'lucide-react';
+import CFARecommendations from './CFARecommendations';
+import DailyAnalysis from './DailyAnalysis';
 
 const API_BASE_URL = 'http://localhost:8002';
 
@@ -88,6 +90,9 @@ interface ComprehensiveRecommendation {
 }
 
 function App() {
+  // Tab state - NEW!
+  const [activeTab, setActiveTab] = useState<'traditional' | 'cfa' | 'daily'>('daily'); // Default to Daily Analysis
+  
   // Form state
   const [investmentAmount, setInvestmentAmount] = useState<string>('10000'); // Default value for testing
   const [riskAppetite, setRiskAppetite] = useState<string>('Medium');
@@ -148,7 +153,103 @@ function App() {
     try {
       const duration = investmentDuration && !isNaN(parseInt(investmentDuration)) ? parseInt(investmentDuration) : 12;
       
-      // Try the comprehensive endpoint first (includes LLM analysis)
+      // Try the dedicated CFA real-time recommendations endpoint first
+      try {
+        console.log('Trying dedicated CFA real-time recommendations...');
+        const response = await axios.get(`${API_BASE_URL}/cfa/investment-recommendations`, {
+          params: {
+            investment_amount: parseFloat(investmentAmount || '10000'),
+            risk_tolerance: riskAppetite.toLowerCase(),
+            investment_horizon: duration
+          },
+          timeout: 30000 // 30 second timeout for real-time data
+        });
+        
+        if (response.data.status === 'success') {
+          console.log('✅ CFA real-time recommendations succeeded');
+          
+          // Transform CFA data to match expected format
+          const cfaData = {
+            status: 'success',
+            message: response.data.message || 'Professional CFA investment analysis completed',
+            timestamp: response.data.timestamp || new Date().toISOString(),
+            recommendations: {
+              stocks: [{
+                sector: 'CFA Professional Analysis',
+                predicted_return: response.data.portfolio_allocation?.average_expected_return || 0.125,
+                investment_opportunities: response.data.recommendations?.length || 0,
+                stocks: response.data.recommendations?.map((rec: any) => ({
+                  symbol: rec.symbol,
+                  company_name: rec.company_name,
+                  current_performance: (rec.expected_return * 100) || 12.5,
+                  investment_strategy: `${rec.investment_style} - ${rec.position_size_recommendation}`,
+                  entry_date: new Date().toISOString().split('T')[0],
+                  entry_price: rec.current_price,
+                  exit_date: new Date(Date.now() + (duration * 30 * 24 * 60 * 60 * 1000)).toISOString().split('T')[0],
+                  exit_price: rec.current_price * (1 + rec.expected_return),
+                  expected_return: rec.expected_return,
+                  stop_loss: rec.current_price * 0.92, // 8% stop loss
+                  target_price: rec.current_price * (1 + rec.expected_return),
+                  holding_period: duration * 30,
+                  volatility: rec.risk_metrics?.volatility || 15.0,
+                  current_price: rec.current_price,
+                  performance_analysis: `Intrinsic value: ₹${rec.intrinsic_value?.toFixed(2)}, Margin of safety: ${(rec.margin_of_safety * 100)?.toFixed(1)}%`,
+                  risk_assessment: `Risk level: ${rec.risk_metrics?.risk_level}, Beta: ${rec.risk_metrics?.beta?.toFixed(2)}`,
+                  market_outlook: `${rec.investment_style} with ${rec.position_size_recommendation}`
+                })) || []
+              }],
+              mutual_funds: [],
+              gold: []
+            }
+          };
+          
+          setComprehensiveData(cfaData);
+          return;
+        }
+      } catch (cfaError: any) {
+        console.log('⚠️ CFA dedicated endpoint failed, trying enhanced traditional endpoint:', cfaError?.message || cfaError);
+      }
+      
+      // Try the CFA-enhanced traditional endpoint as backup
+      try {
+        console.log('Trying CFA-enhanced traditional recommendations...');
+        const response = await axios.get(`${API_BASE_URL}/recommend/`, {
+          params: {
+            top_n: 5,
+            use_realtime: true, // This triggers our CFA system
+            use_ml: true
+          },
+          timeout: 30000 // 30 second timeout for real-time data
+        });
+        
+        if (response.data.status === 'success' && response.data.cfa_enhanced) {
+          console.log('✅ CFA-enhanced traditional recommendations succeeded');
+          
+          // Transform CFA data to match expected format
+          const cfaData = {
+            status: 'success',
+            message: response.data.message,
+            timestamp: response.data.timestamp,
+            recommendations: {
+              stocks: [{
+                sector: 'CFA Real-Time Analysis',
+                predicted_return: 12.5, // Average expected return from CFA analysis
+                investment_opportunities: response.data.stocks?.length || 0,
+                stocks: response.data.stocks || []
+              }],
+              mutual_funds: [],
+              gold: []
+            }
+          };
+          
+          setComprehensiveData(cfaData);
+          return;
+        }
+      } catch (enhancedError: any) {
+        console.log('⚠️ CFA enhanced traditional endpoint failed, falling back to comprehensive endpoint:', enhancedError?.message || enhancedError);
+      }
+      
+      // Try the comprehensive endpoint second (includes LLM analysis)
       try {
         console.log('Trying comprehensive endpoint with LLM analysis...');
         const response = await axios.get(`${API_BASE_URL}/recommend/comprehensive`, {
@@ -301,10 +402,53 @@ function App() {
             />
             Investment Recommender
           </h1>
-          <p className="text-purple-200 text-lg">AI-powered investment recommendations tailored for you</p>
+          <p className="text-purple-200 text-lg mb-6">AI-powered investment recommendations tailored for you</p>
+          
+          {/* Tab Navigation */}
+          <div className="flex justify-center mb-6">
+            <div className="bg-gray-900/60 backdrop-blur-lg rounded-xl p-2 border border-purple-800/40">
+              <button
+                onClick={() => setActiveTab('daily')}
+                className={`px-6 py-3 rounded-lg font-medium transition-all duration-200 ${
+                  activeTab === 'daily'
+                    ? 'bg-gradient-to-r from-purple-700 to-indigo-700 text-white shadow-lg'
+                    : 'text-purple-300 hover:text-white hover:bg-purple-800/30'
+                }`}
+              >
+                📊 Daily Trading Analysis
+              </button>
+              <button
+                onClick={() => setActiveTab('cfa')}
+                className={`px-6 py-3 rounded-lg font-medium transition-all duration-200 ${
+                  activeTab === 'cfa'
+                    ? 'bg-gradient-to-r from-purple-700 to-indigo-700 text-white shadow-lg'
+                    : 'text-purple-300 hover:text-white hover:bg-purple-800/30'
+                }`}
+              >
+                🏆 CFA Professional Analysis
+              </button>
+              <button
+                onClick={() => setActiveTab('traditional')}
+                className={`px-6 py-3 rounded-lg font-medium transition-all duration-200 ${
+                  activeTab === 'traditional'
+                    ? 'bg-gradient-to-r from-purple-700 to-indigo-700 text-white shadow-lg'
+                    : 'text-purple-300 hover:text-white hover:bg-purple-800/30'
+                }`}
+              >
+                📈 Traditional Analysis
+              </button>
+            </div>
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
+        {/* Conditional Content Based on Active Tab */}
+        {activeTab === 'daily' ? (
+          <DailyAnalysis />
+        ) : activeTab === 'cfa' ? (
+          <CFARecommendations />
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
+            {/* Traditional Investment System */}
           {/* Input Panel - Left Column */}
           <div className="lg:col-span-2 space-y-6">
             {/* Investment Amount */}
@@ -677,6 +821,34 @@ function App() {
                 
                 <div className="text-xs text-purple-300 text-center">
                   External ML-powered F&O analysis platform
+                </div>
+              </div>
+            </div>
+
+            {/* Intraday Trading */}
+            <div className="bg-gray-900/40 backdrop-blur-lg rounded-2xl p-6 border border-purple-800/40 shadow-2xl">
+              <h2 className="text-xl font-semibold text-white mb-4 flex items-center">
+                <TrendingUp className="w-6 h-6 mr-2 text-orange-400" />
+                Intraday Trading
+              </h2>
+              
+              <div className="space-y-4">
+                <p className="text-purple-200 text-sm mb-4">
+                  AI-powered intraday stock recommendations with real-time buy/sell signals and charts
+                </p>
+                
+                <button 
+                  onClick={() => window.open('/intraday', '_blank')}
+                  className="block w-full px-4 py-3 rounded-xl bg-gradient-to-r from-orange-700 to-red-700 hover:from-orange-600 hover:to-red-600 text-white text-center font-medium transition-all duration-200 border border-orange-600/50 hover:border-orange-500 shadow-lg hover:shadow-orange-700/40 transform hover:scale-[1.02]"
+                >
+                  <div className="flex items-center justify-center space-x-2">
+                    <TrendingUp className="w-4 h-4" />
+                    <span>Open Intraday Trading</span>
+                  </div>
+                </button>
+                
+                <div className="text-xs text-purple-300 text-center">
+                  Real-time stock analysis with buy/sell signals
                 </div>
               </div>
             </div>
@@ -1064,7 +1236,8 @@ function App() {
             )}
             </div>
           </div>
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );

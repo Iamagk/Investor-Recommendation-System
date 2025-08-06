@@ -7,6 +7,7 @@ import datetime
 from contextlib import asynccontextmanager
 from app.routes import stocks, gold, mutual_funds, load_analysis, recommend, ml_predict, portfolio
 from app.routes import backtest  # Add backtest router
+from app.routes import cfa_recommendations  # Add CFA recommendations
 from data.fetch_gold import get_gold_rates
 from app.services.gold_service import store_gold_rates
 
@@ -140,6 +141,21 @@ app.include_router(mutual_funds.router, prefix="/mutual-funds", tags=["mutual-fu
 app.include_router(gold.router, prefix="/gold", tags=["gold"])
 app.include_router(load_analysis.router, prefix="/analysis", tags=["analysis"])
 app.include_router(ml_predict.router, prefix="/ml", tags=["machine-learning"])
+
+# Import and include intraday trading router
+from app.routes import intraday
+app.include_router(intraday.router, prefix="/intraday", tags=["intraday-trading"])
+
+# Import and include real-time investment recommendations router
+from app.routes import realtime_recommend
+app.include_router(realtime_recommend.router, prefix="/realtime", tags=["realtime-recommendations"])
+
+# Import and include CFA-style comprehensive recommendations router
+app.include_router(cfa_recommendations.router, prefix="/cfa", tags=["cfa-analysis"])
+
+# Import and include daily analysis router for day trading
+from app.routes import daily_analysis
+app.include_router(daily_analysis.router, prefix="/daily", tags=["daily-analysis"])
 
 @app.get("/")
 async def root():
