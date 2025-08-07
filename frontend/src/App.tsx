@@ -3,6 +3,7 @@ import axios from 'axios';
 import { TrendingUp, DollarSign, Target, BarChart3, Coins, Building2, Award, ArrowRight, CheckCircle, ChevronDown } from 'lucide-react';
 import CFARecommendations from './CFARecommendations';
 import DailyAnalysis from './DailyAnalysis';
+import ProfessionalTrading from './ProfessionalTrading';
 
 const API_BASE_URL = 'http://localhost:8002';
 
@@ -91,7 +92,7 @@ interface ComprehensiveRecommendation {
 
 function App() {
   // Tab state - NEW!
-  const [activeTab, setActiveTab] = useState<'traditional' | 'cfa' | 'daily'>('daily'); // Default to Daily Analysis
+  const [activeTab, setActiveTab] = useState<'traditional' | 'cfa' | 'daily' | 'professional'>('daily'); // Default to Daily Analysis
   
   // Form state
   const [investmentAmount, setInvestmentAmount] = useState<string>('10000'); // Default value for testing
@@ -137,13 +138,6 @@ function App() {
     { id: 'mutualFunds', name: 'Mutual Funds', icon: BarChart3, description: 'Diversified fund investments' },
     { id: 'gold', name: 'Gold', icon: Coins, description: 'Precious metal investments' },
   ];
-
-  const extractSymbolFromString = (symbolStr: string): string => {
-    if (!symbolStr) return '';
-    // Extract anything that looks like a stock symbol (uppercase letters)
-    const match = symbolStr.match(/[A-Z]{3,}/);
-    return match ? match[0] : 'STOCK';
-  };
 
   const runPrediction = async () => {
     if (!investmentAmount || !investmentDuration || selectedOptions.length === 0) return;
@@ -418,6 +412,16 @@ function App() {
                 📊 Daily Trading Analysis
               </button>
               <button
+                onClick={() => setActiveTab('professional')}
+                className={`px-6 py-3 rounded-lg font-medium transition-all duration-200 ${
+                  activeTab === 'professional'
+                    ? 'bg-gradient-to-r from-gold-700 to-orange-700 text-white shadow-lg'
+                    : 'text-purple-300 hover:text-white hover:bg-purple-800/30'
+                }`}
+              >
+                � CFA Professional Trading
+              </button>
+              <button
                 onClick={() => setActiveTab('cfa')}
                 className={`px-6 py-3 rounded-lg font-medium transition-all duration-200 ${
                   activeTab === 'cfa'
@@ -425,7 +429,7 @@ function App() {
                     : 'text-purple-300 hover:text-white hover:bg-purple-800/30'
                 }`}
               >
-                🏆 CFA Professional Analysis
+                🏆 CFA Recommendations
               </button>
               <button
                 onClick={() => setActiveTab('traditional')}
@@ -444,6 +448,8 @@ function App() {
         {/* Conditional Content Based on Active Tab */}
         {activeTab === 'daily' ? (
           <DailyAnalysis />
+        ) : activeTab === 'professional' ? (
+          <ProfessionalTrading />
         ) : activeTab === 'cfa' ? (
           <CFARecommendations />
         ) : (

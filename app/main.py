@@ -157,6 +157,10 @@ app.include_router(cfa_recommendations.router, prefix="/cfa", tags=["cfa-analysi
 from app.routes import daily_analysis
 app.include_router(daily_analysis.router, prefix="/daily", tags=["daily-analysis"])
 
+# Import and include enhanced small capital trading router
+from app.routes import professional_trading_enhanced
+app.include_router(professional_trading_enhanced.router, prefix="/pro", tags=["enhanced-small-capital"])
+
 @app.get("/")
 async def root():
     return {

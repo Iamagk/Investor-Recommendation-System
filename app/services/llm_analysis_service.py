@@ -72,6 +72,16 @@ class LLMAnalysisService:
         else:
             return self._generate_fallback_fund_analysis(fund_data)
 
+    def generate_trading_signal_explanation(self, signal_data: Dict[str, Any]) -> Dict[str, str]:
+        """Generate detailed natural language explanation for a professional trading signal"""
+        
+        if self.llm_mode == "ollama":
+            return self._generate_ollama_trading_explanation(signal_data)
+        elif self.llm_mode == "openai":
+            return self._generate_openai_trading_explanation(signal_data)
+        else:
+            return self._generate_fallback_trading_explanation(signal_data)
+
     def _generate_openai_stock_analysis(self, stock_data: Dict[str, Any]) -> Dict[str, str]:
         """Generate stock analysis using OpenAI"""
         try:
@@ -472,6 +482,214 @@ Keep each section to 2-3 sentences. Make it easy to understand for retail invest
                     sections["sip_analysis"] = parts[i + 1].strip()
         
         # Clean up empty sections and return only non-empty ones
+        return {k: v for k, v in sections.items() if v.strip()}
+
+    def _generate_openai_trading_explanation(self, signal_data: Dict[str, Any]) -> Dict[str, str]:
+        """Generate trading signal explanation using OpenAI"""
+        try:
+            prompt = f"""
+            You are a CFA-certified professional trader. Explain this trading signal in clear, actionable language that a trader can immediately understand and act upon.
+
+            TRADING SIGNAL:
+            Stock: {signal_data.get('symbol', 'N/A')} - {signal_data.get('company_name', 'Unknown')}
+            Direction: {signal_data.get('direction', 'N/A')}
+            Confidence: {signal_data.get('confidence_score', 0)}%
+            Entry Price: ₹{signal_data.get('entry_price', 0)}
+            Stop Loss: ₹{signal_data.get('stop_loss', 0)}
+            Target 1: ₹{signal_data.get('target_price_1', 0)}
+            Target 2: ₹{signal_data.get('target_price_2', 0)}
+            Expected ROI: {signal_data.get('expected_roi', 0)}%
+            Risk-Reward: 1:{signal_data.get('risk_reward_ratio', 0)}
+            Trading Style: {signal_data.get('trading_style', 'N/A')}
+            Volatility: {signal_data.get('volatility_level', 'N/A')}
+            Technical Indicators: {', '.join(signal_data.get('signal_log', []))}
+
+            Please provide:
+            1. **Market Analysis**: Why this signal was generated now
+            2. **Action Plan**: Exact steps to execute this trade
+            3. **Risk Management**: How to manage this position
+            4. **Timing**: When to enter, monitor, and exit
+
+            Write in professional but accessible language. Be specific and actionable.
+            """
+
+            client = openai.OpenAI(api_key=self.openai_api_key)
+            response = client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=800,
+                temperature=0.7
+            )
+
+            explanation = response.choices[0].message.content
+            return self._parse_trading_explanation(explanation)
+
+        except Exception as e:
+            logger.error(f"OpenAI trading explanation failed: {e}")
+            return self._generate_fallback_trading_explanation(signal_data)
+
+    def _generate_ollama_trading_explanation(self, signal_data: Dict[str, Any]) -> Dict[str, str]:
+        """Generate trading signal explanation using Ollama"""
+        try:
+            prompt = f"""
+            As a professional trader, explain this trading signal clearly:
+
+            Signal: {signal_data.get('direction', 'N/A')} {signal_data.get('symbol', 'N/A')}
+            Confidence: {signal_data.get('confidence_score', 0)}%
+            Entry: ₹{signal_data.get('entry_price', 0)}, Stop: ₹{signal_data.get('stop_loss', 0)}
+            Targets: ₹{signal_data.get('target_price_1', 0)}, ₹{signal_data.get('target_price_2', 0)}
+            Style: {signal_data.get('trading_style', 'N/A')}
+
+            Explain: 1) Why this signal occurred 2) How to execute it 3) Risk management 4) Timing
+            """
+
+            response = requests.post(
+                "http://localhost:11434/api/generate",
+                json={
+                    "model": "llama3.2:3b",
+                    "prompt": prompt,
+                    "stream": False,
+                    "options": {"temperature": 0.7, "num_predict": 500}
+                },
+                timeout=30
+            )
+
+            if response.status_code == 200:
+                explanation = response.json().get("response", "")
+                return self._parse_trading_explanation(explanation)
+            else:
+                return self._generate_fallback_trading_explanation(signal_data)
+
+        except Exception as e:
+            logger.error(f"Ollama trading explanation failed: {e}")
+            return self._generate_fallback_trading_explanation(signal_data)
+
+    def _generate_fallback_trading_explanation(self, signal_data: Dict[str, Any]) -> Dict[str, str]:
+        """Generate comprehensive rule-based trading signal explanation"""
+        
+        symbol = signal_data.get('symbol', 'this stock')
+        direction = signal_data.get('direction', 'BUY')
+        confidence = signal_data.get('confidence_score', 0)
+        entry_price = signal_data.get('entry_price', 0)
+        stop_loss = signal_data.get('stop_loss', 0)
+        target_1 = signal_data.get('target_price_1', 0)
+        target_2 = signal_data.get('target_price_2', 0)
+        expected_roi = signal_data.get('expected_roi', 0)
+        risk_reward = signal_data.get('risk_reward_ratio', 0)
+        trading_style = signal_data.get('trading_style', 'MOMENTUM')
+        volatility = signal_data.get('volatility_level', 'MEDIUM')
+        signal_log = signal_data.get('signal_log', [])
+
+        # Market Analysis
+        market_analysis = f"Our {trading_style.lower()} trading algorithm has identified a {direction} opportunity in {symbol} with {confidence}% confidence. "
+        
+        if direction == 'BUY':
+            market_analysis += f"Technical indicators suggest upward momentum: {', '.join(signal_log[:3])}. "
+        else:
+            market_analysis += f"Technical indicators suggest downward pressure: {', '.join(signal_log[:3])}. "
+            
+        if volatility == 'HIGH':
+            market_analysis += "High volatility presents both opportunity and risk - position sizing has been adjusted accordingly."
+        elif volatility == 'LOW':
+            market_analysis += "Low volatility suggests stable price movement with predictable patterns."
+        else:
+            market_analysis += "Moderate volatility provides a balanced risk-reward setup."
+
+        # Action Plan
+        action_plan = f"IMMEDIATE ACTION REQUIRED:\n\n"
+        action_plan += f"1. {'BUY' if direction == 'BUY' else 'SELL'} {symbol} at or near ₹{entry_price:.2f}\n"
+        action_plan += f"2. Set stop-loss order at ₹{stop_loss:.2f} (Risk: ₹{abs(entry_price - stop_loss):.2f} per share)\n"
+        action_plan += f"3. Set first profit target at ₹{target_1:.2f} (Profit: ₹{abs(target_1 - entry_price):.2f} per share)\n"
+        action_plan += f"4. Set second profit target at ₹{target_2:.2f} (Profit: ₹{abs(target_2 - entry_price):.2f} per share)\n"
+        action_plan += f"5. Expected return: {expected_roi:.1f}% with 1:{risk_reward:.1f} risk-reward ratio"
+
+        # Risk Management
+        risk_management = f"RISK CONTROLS:\n\n"
+        risk_management += f"• NEVER trade without the stop-loss at ₹{stop_loss:.2f}\n"
+        risk_management += f"• Maximum loss per share: ₹{abs(entry_price - stop_loss):.2f}\n"
+        risk_management += f"• Position size calculated using Kelly Criterion for optimal risk management\n"
+        
+        if volatility == 'HIGH':
+            risk_management += f"• HIGH VOLATILITY: Use smaller position size, wider stops may be needed\n"
+        
+        risk_management += f"• Exit 50% position at Target 1 (₹{target_1:.2f}), let 50% run to Target 2\n"
+        risk_management += f"• If price moves against you beyond stop-loss, exit immediately - no exceptions"
+
+        # Timing
+        if trading_style == 'SCALPING':
+            timing = f"TIMING (Scalping - 1-5 minutes):\n\n"
+            timing += f"• Enter position within next 2-3 minutes if price is near ₹{entry_price:.2f}\n"
+            timing += f"• Monitor every 30 seconds for first 5 minutes\n"
+            timing += f"• Target holding time: 1-5 minutes\n"
+            timing += f"• Be ready to exit quickly - scalping requires fast decision making"
+        elif trading_style == 'MOMENTUM':
+            timing = f"TIMING (Momentum - 15-60 minutes):\n\n"
+            timing += f"• Enter position within next 10-15 minutes if price is near ₹{entry_price:.2f}\n"
+            timing += f"• Monitor every 5 minutes for first 30 minutes\n"
+            timing += f"• Target holding time: 15-60 minutes\n"
+            timing += f"• Allow momentum to build - avoid premature exits"
+        else:  # SWING
+            timing = f"TIMING (Swing - 1-4 hours):\n\n"
+            timing += f"• Enter position within next 30 minutes if price is near ₹{entry_price:.2f}\n"
+            timing += f"• Monitor every 15 minutes for first hour\n"
+            timing += f"• Target holding time: 1-4 hours\n"
+            timing += f"• Be patient - swing trades need time to develop"
+
+        return {
+            "market_analysis": market_analysis,
+            "action_plan": action_plan,
+            "risk_management": risk_management,
+            "timing": timing
+        }
+
+    def _parse_trading_explanation(self, explanation: str) -> Dict[str, str]:
+        """Parse LLM response into structured trading explanation"""
+        sections = {
+            "market_analysis": "",
+            "action_plan": "",
+            "risk_management": "",
+            "timing": ""
+        }
+
+        # Split by common section headers
+        parts = explanation.split('\n')
+        current_section = None
+        current_content = []
+
+        for part in parts:
+            part_lower = part.lower().strip()
+            
+            if any(keyword in part_lower for keyword in ['market', 'analysis', 'why']):
+                if current_section and current_content:
+                    sections[current_section] = '\n'.join(current_content).strip()
+                current_section = "market_analysis"
+                current_content = []
+            elif any(keyword in part_lower for keyword in ['action', 'execute', 'steps', 'how']):
+                if current_section and current_content:
+                    sections[current_section] = '\n'.join(current_content).strip()
+                current_section = "action_plan"
+                current_content = []
+            elif any(keyword in part_lower for keyword in ['risk', 'management', 'control']):
+                if current_section and current_content:
+                    sections[current_section] = '\n'.join(current_content).strip()
+                current_section = "risk_management"
+                current_content = []
+            elif any(keyword in part_lower for keyword in ['timing', 'when', 'entry', 'exit']):
+                if current_section and current_content:
+                    sections[current_section] = '\n'.join(current_content).strip()
+                current_section = "timing"
+                current_content = []
+            elif current_section and part.strip():
+                current_content.append(part)
+
+        # Add final section
+        if current_section and current_content:
+            sections[current_section] = '\n'.join(current_content).strip()
+
+        # If parsing failed, return the whole explanation in market_analysis
+        if not any(sections.values()):
+            sections["market_analysis"] = explanation
+
         return {k: v for k, v in sections.items() if v.strip()}
 
 # Create global instance
